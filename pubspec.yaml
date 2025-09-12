@@ -1,0 +1,55 @@
+name: dct_supportlink
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  curved_navigation_bar: ^1.0.3  # <-- Added
+  firebase_core: ^4.1.0
+  firebase_auth: ^6.0.2
+  cloud_firestore: ^6.0.1
+  shared_preferences: ^2.5.3
+  image_picker: ^1.2.0
+  http: ^1.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icons/app_icon.png
+  adaptive_icon_foreground: assets/icons/1024.png
+  adaptive_icon_background: "#E91E63"
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#E91E63"            # <— default (pre-Android 12)
+  image: assets/icons/1024.png
+  android_gravity: center
+  ios_content_mode: center
+  android_12:                 # <— REQUIRED to override Android 12+ system splash
+    color: "#E91E63"
+    image: assets/icons/1024.png
+
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/loadingscreen.png
+    - assets/UpDes.png
+    - assets/LowDes.png
+    - assets/DCTSupportLinkLogo.png
