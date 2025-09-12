@@ -609,7 +609,8 @@ class _ReportModulePageState extends State<ReportModulePage> {
   String? _serviceType; // 'Facilities and Maintenance' | 'IT Support Services'
   final _serviceTypes = const [
     'Facilities and Maintenance',
-    'IT Support Services',
+    'IT Support Services Software',
+    'IT Support Services - Hardware'
   ];
 
   // Image state
@@ -810,7 +811,7 @@ class _ReportModulePageState extends State<ReportModulePage> {
         Scaffold(
           backgroundColor: Colors.white,
           body: SingleChildScrollView(
-            padding: EdgeInsets.all(edge),
+              padding: EdgeInsets.fromLTRB(edge, edge * 3, edge, edge),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
@@ -1320,26 +1321,43 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
               // validation
               final isSW = svcType == 'IT Support Services - Software';
               final hasImage = (newImage != null) || currentImageUrl.isNotEmpty;
+              // validation
+
               if (svcType.isEmpty) {
-                _toast('Please choose a service type.');
+                await AppMsg.incompleteForm(
+                  context,
+                  custom: 'Please choose a service type.',
+                );
                 return;
               }
               if (!hasImage) {
-                _toast('Please attach an image.');
+                await AppMsg.incompleteForm(
+                  context,
+                  custom: 'Please attach an image.',
+                );
                 return;
               }
               if (isSW) {
                 if (platformName.trim().isEmpty) {
-                  _toast('Please enter the Platform / System Name.');
+                  await AppMsg.incompleteForm(
+                    context,
+                    custom: 'Please enter the Platform / System Name.',
+                  );
                   return;
                 }
               } else {
                 if (buildingName.trim().isEmpty) {
-                  _toast('Please enter the Building Name.');
+                  await AppMsg.incompleteForm(
+                    context,
+                    custom: 'Please enter the Building Name.',
+                  );
                   return;
                 }
                 if (floorLocation.trim().isEmpty) {
-                  _toast('Please enter the Floor / Room Location.');
+                  await AppMsg.incompleteForm(
+                    context,
+                    custom: 'Please enter the Floor / Room Location.',
+                  );
                   return;
                 }
               }
@@ -1352,7 +1370,11 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                 final uploaded = await _uploadToCloudinary(newImage!);
                 if (uploaded == null) {
                   setLocal(() => saving = false);
-                  _toast('Image upload failed. Try again.');
+                  await AppMsg.error(
+                    context,
+                    'Upload Failed',
+                    m: 'Image upload failed. Please try again.',
+                  );
                   return;
                 }
                 finalUrl = uploaded;
@@ -1389,9 +1411,13 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                 }
 
                 if (mounted) Navigator.pop(ctx);
-                _toast('Report updated.');
+                await AppMsg.success(context, 'Report updated.');
               } catch (e) {
-                _toast('Failed to update the report.');
+                await AppMsg.error(
+                  context,
+                  'Update Failed',
+                  m: 'Failed to update the report.',
+                );
               } finally {
                 setLocal(() => saving = false);
               }

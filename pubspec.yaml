@@ -25,25 +25,28 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.13.1
-  flutter_native_splash: ^2.4.0
+  flutter_native_splash: ^2.4.6
+
+
+
+
 
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/icons/app_icon.png
-  adaptive_icon_foreground: assets/icons/1024.png
-  adaptive_icon_background: "#E91E63"
   remove_alpha_ios: true
 
 flutter_native_splash:
-  color: "#E91E63"            # <— default (pre-Android 12)
-  image: assets/icons/1024.png
-  android_gravity: center
-  ios_content_mode: center
-  android_12:                 # <— REQUIRED to override Android 12+ system splash
-    color: "#E91E63"
-    image: assets/icons/1024.png
-
+  color: "#FFFFFF"                # Background color (hex)
+  image: assets/loadingscreen.png   # Your splash logo
+  android: true
+  ios: true
+  web: false                      # set true if you want web splash too
+  fullscreen: true                # optional, removes status bar
+  android_12:
+    background_image: assets/loadingscreen.png
+    color: "#FFFFFF"
 
 flutter:
   uses-material-design: true
@@ -53,3 +56,4 @@ flutter:
     - assets/UpDes.png
     - assets/LowDes.png
     - assets/DCTSupportLinkLogo.png
+    - assets/loadingscreen.png

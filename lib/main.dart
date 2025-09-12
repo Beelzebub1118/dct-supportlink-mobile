@@ -3,7 +3,8 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'firebase_options.dart';
 import 'login.dart';
-import 'dashboard.dart'; // ⬅️ import your existing Dashboard
+import 'dashboard.dart';
+import 'SplashScreen.dart'; // ⬅️ import the splash screen
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,16 +27,17 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
 
-      // Start on the Login page
-      initialRoute: '/login',
+      // Start with Splash
+      initialRoute: '/splash',
 
       // Named routes
       routes: {
+        '/splash': (_) => const SplashScreen(),
         '/login': (_) => const LoginScreen(),
-        '/dashboard': (_) => const Dashboard(), // ⬅️ go here after login
+        '/dashboard': (_) => const Dashboard(),
       },
 
-      // Optional safety fallback
+      // Fallback route
       onUnknownRoute: (_) => MaterialPageRoute(
         builder: (_) => const LoginScreen(),
       ),
