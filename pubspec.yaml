@@ -30,7 +30,6 @@ dev_dependencies:
 
 
 
-
 flutter_launcher_icons:
   android: true
   ios: true
@@ -38,7 +37,7 @@ flutter_launcher_icons:
   remove_alpha_ios: true
 
 flutter_native_splash:
-  color: "#FFFFFF"                # Background color (hex)
+  color: "#E91E63"                # Background color (hex)
   image: assets/loadingscreen.png   # Your splash logo
   android: true
   ios: true
@@ -46,7 +45,8 @@ flutter_native_splash:
   fullscreen: true                # optional, removes status bar
   android_12:
     background_image: assets/loadingscreen.png
-    color: "#FFFFFF"
+    color: "#E91E63"
+
 
 flutter:
   uses-material-design: true
