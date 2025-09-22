@@ -2,7 +2,7 @@ name: dct_supportlink
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 4.0.0+4
 
 environment:
   sdk: ^3.8.1
@@ -38,7 +38,7 @@ flutter_launcher_icons:
 
 flutter_native_splash:
   color: "#E91E63"                # Background color (hex)
-  image: assets/loadingscreen.png   # Your splash logo
+  image: assets/DCTSupportLinkLogo.png   # Your splash logo
   android: true
   ios: true
   web: false                      # set true if you want web splash too

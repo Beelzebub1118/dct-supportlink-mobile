@@ -90,4 +90,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'dct-supportlink.firebasestorage.app',
     measurementId: 'G-9S21Z1Z38W',
   );
+
 }

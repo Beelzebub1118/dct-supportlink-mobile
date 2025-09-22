@@ -1,4 +1,4 @@
-package com.example.dct_supportlink_mobile
+package com.dct.supportlink
 
 import io.flutter.embedding.android.FlutterActivity
 
