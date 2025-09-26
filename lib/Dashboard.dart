@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ui_messages.dart';
 import 'dart:async';
+import 'package:rxdart/rxdart.dart';
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
 
@@ -20,7 +21,7 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   int _selectedIndex = 0;
-  final Color pinkColor = const Color(0xFFE91E63);
+  final Color pinkColor = const Color(0xFFEB58B5);
   final Color iconColor = Colors.white;
   final Color inactiveIconColor = Colors.white70;
   Map<String, String> _customSolutions = {}; // question -> joined answers
@@ -242,6 +243,7 @@ class _DashboardState extends State<Dashboard> {
   }
 
   @override
+
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final navH = (size.height * 0.085).clamp(56.0, 72.0);
@@ -253,15 +255,32 @@ class _DashboardState extends State<Dashboard> {
           // current page
           _pages[_selectedIndex],
 
-          // chat bubble (kept where you placed it)
+          // chat side tab
           Positioned(
-            right: 16,
-            bottom: -50 + navH, // keep above bottom nav (unchanged as requested)
-            child: FloatingActionButton.extended(
-              onPressed: () => setState(() => _chatOpen = true),
-              backgroundColor: pinkColor,
-              icon: const Icon(Icons.support_agent, color: Colors.white),
-              label: const Text('Help', style: TextStyle(color: Colors.white)),
+            right: 0,
+            top: size.height * 0.3,
+            child: GestureDetector(
+              onTap: () => setState(() => _chatOpen = true),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                decoration: const BoxDecoration(
+                  color: const Color(0xFFEB58B5),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    bottomLeft: Radius.circular(12),
+                  ),
+                ),
+                child: const RotatedBox(
+                  quarterTurns: 1,
+                  child: Text(
+                    'Help',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
 
@@ -271,26 +290,33 @@ class _DashboardState extends State<Dashboard> {
       ),
       bottomNavigationBar: CurvedNavigationBar(
         height: navH,
-        backgroundColor: Colors.transparent,
-        color: pinkColor,
-        buttonBackgroundColor: pinkColor,
+        backgroundColor: const Color(0xFFFDE2FF),
+        color: const Color(0xFFEB58B5),
+        buttonBackgroundColor: const Color(0xFFEB58B5),
         animationDuration: const Duration(milliseconds: 300),
         items: <Widget>[
-          Icon(Icons.assessment_outlined,
-              size: iconSz,
-              color: _selectedIndex == 0 ? iconColor : inactiveIconColor),
-          Icon(Icons.history_outlined,
-              size: iconSz,
-              color: _selectedIndex == 1 ? iconColor : inactiveIconColor),
-          Icon(Icons.account_circle_outlined,
-              size: iconSz,
-              color: _selectedIndex == 2 ? iconColor : inactiveIconColor),
+          Icon(
+            Icons.assessment_outlined,
+            size: iconSz,
+            color: _selectedIndex == 0 ? Colors.white : Colors.white70,
+          ),
+          Icon(
+            Icons.history_outlined,
+            size: iconSz,
+            color: _selectedIndex == 1 ? Colors.white : Colors.white70,
+          ),
+          Icon(
+            Icons.account_circle_outlined,
+            size: iconSz,
+            color: _selectedIndex == 2 ? Colors.white : Colors.white70,
+          ),
         ],
         index: _selectedIndex,
         onTap: _onItemTapped,
       ),
     );
   }
+
 
   Widget _buildChatOverlay(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -384,7 +410,7 @@ class _DashboardState extends State<Dashboard> {
                                     children: const [
                                       CircleAvatar(
                                         radius: 12,
-                                        backgroundColor: Color(0xFFE91E63),
+                                        backgroundColor: const Color(0xFFEB58B5),
                                         child: Icon(Icons.smart_toy, color: Colors.white, size: 14),
                                       ),
                                       SizedBox(width: 8),
@@ -402,7 +428,7 @@ class _DashboardState extends State<Dashboard> {
                                         return ActionChip(
                                           label: Text(q),
                                           onPressed: () => _sendChat(q),
-                                          backgroundColor: const Color(0xFFE91E63),
+                                          backgroundColor: const Color(0xFFEB58B5),
                                           labelStyle: const TextStyle(color: Colors.white),
                                         );
                                       }).toList(),
@@ -448,7 +474,7 @@ class _DashboardState extends State<Dashboard> {
                                   return ActionChip(
                                     label: Text(q),
                                     onPressed: () => _sendChat(q),
-                                    backgroundColor: const Color(0xFFE91E63),
+                                    backgroundColor: const Color(0xFFEB58B5),
                                     labelStyle: const TextStyle(color: Colors.white),
                                   );
                                 }).toList(),
@@ -548,7 +574,7 @@ class _DashboardState extends State<Dashboard> {
                     margin: const EdgeInsets.symmetric(vertical: 6),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: m.isUser ? const Color(0xFFE91E63) : Colors.grey.shade200,
+                      color: m.isUser ?const Color(0xFFEB58B5) : Colors.grey.shade200,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     constraints: BoxConstraints(maxWidth: (isWide ? 720 : panelW) * 0.78),
@@ -869,7 +895,7 @@ class _ReportModulePageState extends State<ReportModulePage> {
                       child: ElevatedButton(
                         onPressed: _submitting ? null : _submit,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _pink,
+                          backgroundColor:  const Color(0xFFEB58B5),
                           padding: EdgeInsets.symmetric(vertical: btnVPad),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1210,38 +1236,24 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
 
   // Remove from MY log (resolved only)
   Future<void> _removeFromMyLog(_ReportItem r) async {
+    // only allow removing resolved items
     if (r.status.toLowerCase() != 'resolved') {
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Not allowed'),
-          content: const Text('You can only remove items that are already Resolved.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-          ],
-        ),
+      await AppMsg.info(
+        context,
+        'Not allowed',
+        m: 'You can only remove items that are already Resolved.',
       );
       return;
     }
 
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Remove from your log?'),
-        content: const Text('This action will remove this report from your Report Log.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
-        ],
-      ),
-    ) ??
-        false;
+    // confirmation (uses existing public helper)
+    final ok = await AppMsg.confirmDeleteReport(context);
     if (!ok) return;
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not signed in')));
+        await AppMsg.notSignedIn(context);
         return;
       }
 
@@ -1264,14 +1276,27 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(r.hiddenForAdmin == true ? 'Deleted.' : 'Removed from your log.')),
+
+      // show success prompt in same AppMsg style
+      await AppMsg.success(
+        context,
+        'Success',
+        m: r.hiddenForAdmin == true
+            ? 'This report has been permanently deleted.'
+            : 'This report has been removed from your log.',
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to remove report.')));
+      await AppMsg.error(
+        context,
+        'Error',
+        m: 'Failed to remove report. Please try again.',
+      );
     }
   }
+
+
+
 
   // ---------- EDIT: open sheet ----------
   void _openEditSheet(_ReportItem r) {

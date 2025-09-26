@@ -5,29 +5,37 @@ enum AppDialogType { success, error, warning, info }
 class AppMsg {
   // Brand-ish colors (warning = orange, ok button ~ purple like your web)
   static const _okBtnColor = Color(0xFF6C63FF);
-  static const _dark       = Color(0xFF0A1936);
+  static const _dark = Color(0xFF0A1936);
 
   static Color _typeColor(AppDialogType t) {
     switch (t) {
-      case AppDialogType.success: return Colors.green;
-      case AppDialogType.error:   return Colors.red;
-      case AppDialogType.warning: return Colors.orange;
-      case AppDialogType.info:    return Colors.blue;
+      case AppDialogType.success:
+        return Colors.green;
+      case AppDialogType.error:
+        return Colors.red;
+      case AppDialogType.warning:
+        return Colors.orange;
+      case AppDialogType.info:
+        return Colors.blue;
     }
   }
 
   static IconData _typeIcon(AppDialogType t) {
     switch (t) {
-      case AppDialogType.success: return Icons.check_rounded;
-      case AppDialogType.error:   return Icons.close_rounded;
-      case AppDialogType.warning: return Icons.priority_high_rounded;
-      case AppDialogType.info:    return Icons.info_rounded;
+      case AppDialogType.success:
+        return Icons.check_rounded;
+      case AppDialogType.error:
+        return Icons.close_rounded;
+      case AppDialogType.warning:
+        return Icons.priority_high_rounded;
+      case AppDialogType.info:
+        return Icons.info_rounded;
     }
   }
 
   // ---------- Public helpers (names match your web semantics) ----------
   static Future<void> success(BuildContext c, String t, {String? m}) =>
-      _alert(c, type: AppDialogType.success, title: t, message: m);
+      _alert(c, type: AppDialogType.success, title: t, message: m, autoClose: true);
 
   static Future<void> error(BuildContext c, String t, {String? m}) =>
       _alert(c, type: AppDialogType.error, title: t, message: m);
@@ -42,7 +50,7 @@ class AppMsg {
           message: custom ?? 'Please fill in all required fields.');
 
   static Future<void> reportSubmitted(BuildContext c) =>
-      _alert(c, type: AppDialogType.success, title: 'Success', message: 'Report submitted!');
+      _alert(c, type: AppDialogType.success, title: 'Success', message: 'Report submitted!', autoClose: true);
 
   static Future<void> uploadFailed(BuildContext c) =>
       _alert(c, type: AppDialogType.error, title: 'Upload failed', message: 'Please try again.');
@@ -63,7 +71,7 @@ class AppMsg {
   static Future<void> uniquePassword(BuildContext c) =>
       _alert(c, type: AppDialogType.warning, title: 'Use a new password', message: 'New password must be different from current.');
   static Future<void> passwordUpdated(BuildContext c) =>
-      _alert(c, type: AppDialogType.success, title: 'Password updated!');
+      _alert(c, type: AppDialogType.success, title: 'Password updated!', autoClose: true);
   static Future<void> changePasswordFailed(BuildContext c) =>
       _alert(c, type: AppDialogType.error, title: 'Failed to change password');
   static Future<void> attemptOverload(BuildContext c) =>
@@ -78,13 +86,13 @@ class AppMsg {
       type: AppDialogType.warning,
       title: 'Are you sure?',
       message: "You won't be able to revert this!",
-      confirmText: 'Yes, delete it!',
+      confirmText: 'Yes',
       cancelText: 'Cancel',
     );
   }
 
   static Future<void> deleted(BuildContext c) =>
-      _alert(c, type: AppDialogType.success, title: 'Deleted!', message: 'Your report has been deleted.');
+      _alert(c, type: AppDialogType.success, title: 'Deleted!', message: 'Your report has been deleted.', autoClose: true);
   static Future<void> deleteFailed(BuildContext c) =>
       _alert(c, type: AppDialogType.error, title: 'Delete failed', message: 'Please try again.');
   // --------------------------------------------------------------------
@@ -96,18 +104,23 @@ class AppMsg {
         required String title,
         String? message,
         String okText = 'OK',
+        bool autoClose = false,
+        Duration duration = const Duration(seconds: 2),
       }) async {
     final color = _typeColor(type);
-    await showDialog<void>(
+
+    showDialog<void>(
       context: ctx,
-      barrierDismissible: false,
+      barrierDismissible: !autoClose,
       barrierColor: Colors.black.withOpacity(0.55),
       builder: (c) => _DialogShell(
         color: color,
         icon: _typeIcon(type),
         title: title,
         message: message,
-        actions: [
+        actions: autoClose
+            ? []
+            : [
           _DialogButton(
             text: okText,
             bg: _okBtnColor,
@@ -116,6 +129,13 @@ class AppMsg {
         ],
       ),
     );
+
+    if (autoClose) {
+      await Future.delayed(duration);
+      if (ctx.mounted) {
+        Navigator.of(ctx, rootNavigator: true).pop();
+      }
+    }
   }
 
   // Confirm dialog (two buttons)
@@ -212,12 +232,13 @@ class _DialogShell extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 22),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: actions
-                    .map((w) => Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: w))
-                    .toList(),
-              ),
+              if (actions.isNotEmpty)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: actions
+                      .map((w) => Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: w))
+                      .toList(),
+                ),
             ],
           ),
         ),

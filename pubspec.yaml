@@ -19,7 +19,7 @@ dependencies:
   shared_preferences: ^2.5.3
   image_picker: ^1.2.0
   http: ^1.5.0
-
+  rxdart: ^0.27.7
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -33,19 +33,8 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/icons/app_icon.png
+  image_path: assets/icons/1024.png
   remove_alpha_ios: true
-
-flutter_native_splash:
-  color: "#E91E63"                # Background color (hex)
-  image: assets/DCTSupportLinkLogo.png   # Your splash logo
-  android: true
-  ios: true
-  web: false                      # set true if you want web splash too
-  fullscreen: true                # optional, removes status bar
-  android_12:
-    background_image: assets/loadingscreen.png
-    color: "#E91E63"
 
 
 flutter:
