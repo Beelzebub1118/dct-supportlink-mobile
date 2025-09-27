@@ -11,15 +11,21 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
-  curved_navigation_bar: ^1.0.3  # <-- Added
-  firebase_core: ^4.1.0
+  # ---- FlutterFire (all aligned on core ^4.x) ----
+  firebase_core: ^4.1.1
   firebase_auth: ^6.0.2
   cloud_firestore: ^6.0.1
+  firebase_messaging: ^16.0.1   # ⬅️ use this (16.1.0 doesn't exist)
+
+  # ---- Other ----
+  flutter_local_notifications: ^17.2.3
+  cupertino_icons: ^1.0.8
+  curved_navigation_bar: ^1.0.3
   shared_preferences: ^2.5.3
   image_picker: ^1.2.0
   http: ^1.5.0
   rxdart: ^0.27.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -27,19 +33,14 @@ dev_dependencies:
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.4.6
 
-
-
-
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/icons/1024.png
   remove_alpha_ios: true
 
-
 flutter:
   uses-material-design: true
-
   assets:
     - assets/loadingscreen.png
     - assets/UpDes.png

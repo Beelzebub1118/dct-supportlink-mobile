@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ui_messages.dart';
+import 'notification_service.dart'; // ⬅️ import added
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -100,6 +102,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('uid', uid);
       await prefs.setString('role', role);
+
+      // 4.1) ⬅️ Save this device's FCM token immediately
+      await NotificationService.saveTokenToFirestore(context);
 
       // 5) Success modal → navigate
       await AppMsg.success(context, 'Login successful');
@@ -220,7 +225,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         errorBuilder: (context, error, stack) =>
                             _buildMissingImagePlaceholder(
                               'Logo',
-                              height: isSmallScreen ? screenHeight * 0.15 : 200,
+                              height:
+                              isSmallScreen ? screenHeight * 0.15 : 200,
                             ),
                       ),
                     ),
@@ -264,7 +270,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: () =>
                               setState(() => _obscure = !_obscure),
                           icon: Icon(
-                              _obscure ? Icons.visibility : Icons.visibility_off),
+                            _obscure
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
                         ),
                       ),
                       onSubmitted: (_) => _handleLogin(),

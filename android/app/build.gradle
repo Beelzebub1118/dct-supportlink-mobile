@@ -23,12 +23,16 @@ android {
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
+    // ✅ Use Java 17 and enable core library desugaring
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true   // <-- important
     }
+
+    // ✅ Match Kotlin to 17 as well
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 
     defaultConfig {
@@ -37,6 +41,7 @@ android {
         targetSdk flutter.targetSdkVersion
         versionCode flutter.versionCode
         versionName flutter.versionName
+        // multiDexEnabled true  // not needed with minSdk 23+, keep commented
     }
 
     signingConfigs {
@@ -60,4 +65,9 @@ android {
 
 flutter {
     source '../..'
+}
+
+dependencies {
+    // ✅ Required for core library desugaring (lets you use newer Java APIs on older Android)
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
 }
