@@ -287,8 +287,12 @@ class _DashboardState extends State<Dashboard> {
   };
 
   void _onItemTapped(int index) {
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      if (_selectedIndex != 0) _chatOpen = false; // hide help/chat off the report module
+    });
   }
+
 
   // --- Web-like pick handler (switches to conversation on mobile + typing) ---
   void _sendChat(String q) {
@@ -333,37 +337,44 @@ class _DashboardState extends State<Dashboard> {
           _pages[_selectedIndex],
 
           // chat side tab
-          Positioned(
-            right: 0,
-            top: size.height * 0.3,
-            child: GestureDetector(
-              onTap: () => setState(() => _chatOpen = true),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEB58B5),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    bottomLeft: Radius.circular(12),
+          // chat side tab (ONLY on ReportModulePage)
+          if (_selectedIndex == 0)
+            Positioned(
+              right: 0,
+              top: size.height * 0.3,
+              child: GestureDetector(
+                onTap: () => setState(() => _chatOpen = true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFEB58B5),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      bottomLeft: Radius.circular(12),
+                    ),
                   ),
-                ),
-                child: const RotatedBox(
-                  quarterTurns: 1,
-                  child: Text(
-                    'Help',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                  child: const RotatedBox(
+                    quarterTurns: 1,
+                    child: Text(
+                      'Help',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // chat overlay panel
-          if (_chatOpen) _buildChatOverlay(context),
+          // chat overlay panel (ONLY on ReportModulePage)
+          // chat overlay panel (ONLY on ReportModulePage)
+          // chat overlay panel (ONLY on ReportModulePage)
+          if (_selectedIndex == 0 && _chatOpen) _buildChatOverlay(context),
+
+
         ],
+
       ),
       bottomNavigationBar: CurvedNavigationBar(
         height: navH,
@@ -564,8 +575,15 @@ class _DashboardState extends State<Dashboard> {
 
                     // footer note (unchanged)
                     const Divider(height: 1),
-                    Padding(
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 12),
                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.grey.shade400),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: Text(
                         "Note: For complex issues, please contact:\n"
                             "- CSD (for plumbing)\n"
@@ -574,6 +592,8 @@ class _DashboardState extends State<Dashboard> {
                         style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                       ),
                     ),
+
+
                   ],
                 ),
               ),
@@ -697,6 +717,7 @@ class ReportModulePage extends StatefulWidget {
 }
 
 class _ReportModulePageState extends State<ReportModulePage> {
+
   // Form state
   final _buildingCtrl = TextEditingController();
   final _floorCtrl = TextEditingController();
@@ -705,10 +726,9 @@ class _ReportModulePageState extends State<ReportModulePage> {
   String? _serviceType; // 'Facilities and Maintenance' | 'IT Support Services'
   final _serviceTypes = const [
     'Facilities and Maintenance',
-    'IT Support Services Software',
-    'IT Support Services - Hardware'
+    'IT Support Services - Software',
+    'IT Support Services - Hardware',
   ];
-
   // Image state
   final _picker = ImagePicker();
   XFile? _pickedImage;
@@ -846,16 +866,38 @@ class _ReportModulePageState extends State<ReportModulePage> {
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      AppMsg.notSignedIn(context);
+      await AppMsg.notSignedIn(context);
       return;
     }
 
     if (building.isEmpty || floor.isEmpty || service == null || image == null) {
-      await _showInfo(
-        context,
-        'Incomplete Form',
-        'Please complete all required fields and select an image.',
+      // Auto-closing error dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.error, color: Colors.red, size: 48),
+              SizedBox(height: 12),
+              Text(
+                'Incomplete Form',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Please complete all required fields and select an image.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       );
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) Navigator.of(context).pop(); // close dialog
       return;
     }
 
@@ -864,23 +906,23 @@ class _ReportModulePageState extends State<ReportModulePage> {
       // 1) Upload image first
       final imageUrl = await _uploadToCloudinary(image);
       if (imageUrl == null) {
-        AppMsg.uploadFailed(context);
+        await AppMsg.uploadFailed(context);
         return;
       }
 
       // 2) Create Firestore doc
       await FirebaseFirestore.instance.collection('userReport').add({
+        'uid': uid,
         'serverTimeStamp': FieldValue.serverTimestamp(),
         'buildingName': building,
         'floorLocation': floor,
         'serviceType': service,
         'additionalDetails': details,
         'imageUrl': imageUrl,
-        'uid': uid,
         'status': 'Pending',
       });
 
-      // 3) Reset
+      // 3) Reset fields
       _buildingCtrl.clear();
       _floorCtrl.clear();
       _detailsCtrl.clear();
@@ -889,14 +931,42 @@ class _ReportModulePageState extends State<ReportModulePage> {
         _pickedImage = null;
       });
 
-      AppMsg.reportSubmitted(context);
+      // ✅ Success modal (auto-close after 2s)
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.check_circle, color: Colors.green, size: 48),
+              SizedBox(height: 12),
+              Text(
+                'Submitted',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Your report has been submitted successfully.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) Navigator.of(context).pop(); // close success dialog
     } catch (e) {
       debugPrint('Error submitting report: $e');
-      AppMsg.reportSubmitFailed(context);
+      await AppMsg.reportSubmitFailed(context);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1146,34 +1216,231 @@ class _ReportModulePageState extends State<ReportModulePage> {
 // If you use a custom message helper like on your existing codebase
 // import 'package:your_package/app_msg.dart';  // <-- keep your original import
 
+// lib/ui/app_msg.dart (or keep in the same file where AppMsg lives)
+
+
+/// Drop-in replacement for your old AppMsg.
+/// All methods return a modal dialog (not a SnackBar).
 class AppMsg {
-  static Future<void> success(BuildContext c, String t, {String? m}) async =>
-      _show(c, m ?? t, bg: Colors.green);
+  // ----- Public API (same call sites as before) -----
+  static Future<void> success(BuildContext c, String title, {String? m}) =>
+      _dialog(
+        c,
+        title: title,
+        message: m ?? title,
+        variant: _Variant.success,
+      );
 
-  static Future<void> error(BuildContext c, String t, {String? m}) async =>
-      _show(c, m ?? t, bg: Colors.red);
+  static Future<void> error(BuildContext c, String title, {String? m}) =>
+      _dialog(
+        c,
+        title: title,
+        message: m ?? title,
+        variant: _Variant.error,
+      );
 
-  static Future<void> incompleteForm(BuildContext c, {String? custom}) async =>
-      _show(c, custom ?? 'Please complete all required fields.');
+  static Future<void> incompleteForm(BuildContext c, {String? custom}) =>
+      _dialog(
+        c,
+        title: 'Incomplete Form',
+        message: custom ?? 'Please complete all required fields.',
+        variant: _Variant.warning,
+      );
 
-  static Future<void> uploadFailed(BuildContext c) async =>
-      _show(c, 'Upload failed. Please try again.', bg: Colors.red);
+  static Future<void> uploadFailed(BuildContext c) =>
+      _dialog(
+        c,
+        title: 'Upload Failed',
+        message: 'Please try again.',
+        variant: _Variant.error,
+      );
 
-  static Future<void> reportSubmitted(BuildContext c) async =>
-      _show(c, 'Report submitted successfully.', bg: Colors.green);
+  static Future<void> reportSubmitted(BuildContext c) =>
+      _dialog(
+        c,
+        title: 'Success',
+        message: 'Report submitted successfully.',
+        variant: _Variant.success,
+      );
 
-  static Future<void> reportSubmitFailed(BuildContext c) async =>
-      _show(c, 'Failed to submit the report.', bg: Colors.red);
+  static Future<void> reportSubmitFailed(BuildContext c) =>
+      _dialog(
+        c,
+        title: 'Failed',
+        message: 'Failed to submit the report.',
+        variant: _Variant.error,
+      );
 
-  static Future<void> notSignedIn(BuildContext c) async =>
-      _show(c, 'Not signed in. Please log in again.', bg: Colors.red);
+  static Future<void> notSignedIn(BuildContext c) =>
+      _dialog(
+        c,
+        title: 'Not signed in',
+        message: 'Please log in again.',
+        variant: _Variant.error,
+      );
 
-  static Future<void> _show(BuildContext c, String msg, {Color bg = Colors.black87}) async {
-    ScaffoldMessenger.of(c).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: bg),
+  // ----- Core dialog builder -----
+  static Future<void> _dialog(
+      BuildContext context, {
+        required String title,
+        required String message,
+        _Variant variant = _Variant.info,
+      }) async {
+    final colors = _palette(Theme.of(context).brightness, variant);
+
+    // Using root navigator helps if you're calling from a bottom sheet.
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      useRootNavigator: true,
+      builder: (c) => AlertDialog(
+        backgroundColor: colors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _IconBadge(variant: variant, colors: colors),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: colors.title,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: colors.body),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 96,
+              child: FilledButton(
+                style: ButtonStyle(
+                  backgroundColor: WidgetStatePropertyAll(colors.ctaBg),
+                  foregroundColor: WidgetStatePropertyAll(colors.ctaFg),
+                  shape: WidgetStatePropertyAll(
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                onPressed: () => Navigator.of(c, rootNavigator: true).pop(),
+                child: const Text('OK'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ----- Color palette & icon mapping -----
+  static _Colors _palette(Brightness b, _Variant v) {
+    final isDark = b == Brightness.dark;
+
+    Color card = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    Color title = isDark ? Colors.white : const Color(0xFF1F1F1F);
+    Color body  = isDark ? Colors.white70 : const Color(0xFF505050);
+
+    switch (v) {
+      case _Variant.success:
+        return _Colors(
+          card: card,
+          title: title,
+          body: body,
+          ring: const Color(0xFF4CAF50),
+          iconBg: const Color(0xFFE8F5E9),
+          icon: const Color(0xFF2E7D32),
+          ctaBg: const Color(0xFF4CAF50),
+          ctaFg: Colors.white,
+          iconData: Icons.check_circle,
+        );
+      case _Variant.warning:
+        return _Colors(
+          card: card,
+          title: title,
+          body: body,
+          ring: const Color(0xFFFFB300),
+          iconBg: const Color(0xFFFFF3E0),
+          icon: const Color(0xFFEF6C00),
+          ctaBg: const Color(0xFF6750A4), // purple-ish like your screenshot
+          ctaFg: Colors.white,
+          iconData: Icons.error_outline,
+        );
+      case _Variant.error:
+        return _Colors(
+          card: card,
+          title: title,
+          body: body,
+          ring: const Color(0xFFE53935),
+          iconBg: const Color(0xFFFFEBEE),
+          icon: const Color(0xFFC62828),
+          ctaBg: const Color(0xFFE53935),
+          ctaFg: Colors.white,
+          iconData: Icons.highlight_off,
+        );
+      case _Variant.info:
+      default:
+        return _Colors(
+          card: card,
+          title: title,
+          body: body,
+          ring: const Color(0xFF1E88E5),
+          iconBg: const Color(0xFFE3F2FD),
+          icon: const Color(0xFF1565C0),
+          ctaBg: const Color(0xFF1E88E5),
+          ctaFg: Colors.white,
+          iconData: Icons.info_outline,
+        );
+    }
+  }
+}
+
+enum _Variant { success, warning, error, info }
+
+class _Colors {
+  final Color card, title, body, ring, iconBg, icon, ctaBg, ctaFg;
+  final IconData iconData;
+  _Colors({
+    required this.card,
+    required this.title,
+    required this.body,
+    required this.ring,
+    required this.iconBg,
+    required this.icon,
+    required this.ctaBg,
+    required this.ctaFg,
+    required this.iconData,
+  });
+}
+
+class _IconBadge extends StatelessWidget {
+  final _Variant variant;
+  final _Colors colors;
+  const _IconBadge({super.key, required this.variant, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: colors.iconBg,
+        shape: BoxShape.circle,
+        border: Border.all(color: colors.ring, width: 3),
+      ),
+      child: Center(
+        child: Icon(colors.iconData, color: colors.icon, size: 32),
+      ),
     );
   }
 }
+
+
 
 class ReportLogsPage extends StatefulWidget {
   const ReportLogsPage({super.key});
@@ -1183,6 +1450,8 @@ class ReportLogsPage extends StatefulWidget {
 }
 
 class _ReportLogsPageState extends State<ReportLogsPage> {
+  String? _expandedId; // only one open at a time
+
   // ---------- Cloudinary uploader (called on SAVE only when a new photo was picked) ----------
   Future<String?> _uploadToCloudinary(XFile file) async {
     try {
@@ -1505,16 +1774,39 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
   Future<void> _removeFromMyLog(_ReportItem r) async {
     if (_uid == null) return;
 
-    final ok = await _showConfirm(
-      context,
-      title: 'Remove from your log?',
-      message: 'This action will remove this report from your Report Log.',
-      confirmText: 'Remove',
-      cancelText: 'Cancel',
+    // 1) Confirm first
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Remove from your log?'),
+        content: const Text(
+          'This will remove this report from your Reported Issues on your device. '
+              'You can still find it in Records if needed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(c).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
     );
-    if (!ok) return;
+
+    if (ok != true) return;
 
     try {
+      // 2) Persist the hide
       await FirebaseFirestore.instance
           .collection('userResolvedHides')
           .doc('$_uid-${r.id}')
@@ -1524,19 +1816,75 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         'at': FieldValue.serverTimestamp(),
       });
 
-      _toast(
-        context,
-        (r.hiddenForAdmin == true) ? 'Deleted' : 'Removed: The report is no longer in your Report Log.',
-      );
+      // 3) Immediate local hide
+      if (mounted) {
+        setState(() {
+          _hiddenResolvedIds.add(r.id);
+        });
+      }
 
-      // local immediate hide
-      setState(() {
-        _hiddenResolvedIds.add(r.id);
-      });
+      if (!mounted) return;
+
+      // 4) Success modal (auto-close after 2s)
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.check_circle, color: Colors.green, size: 48),
+              SizedBox(height: 12),
+              Text(
+                'Removed',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'The report is no longer in your Reported Issues.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) Navigator.of(context).pop(); // close success dialog
     } catch (e) {
-      _toast(context, 'Error: Failed to remove the report from your log.');
+      if (!mounted) return;
+
+      // Error modal (auto-close after 2s)
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.error, color: Colors.red, size: 48),
+              SizedBox(height: 12),
+              Text(
+                'Failed',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Could not remove the report. Please try again.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) Navigator.of(context).pop(); // close error dialog
     }
   }
+
 
   Future<void> _approveResolution(_ReportItem r) async {
     if (_uid != r.uid) {
@@ -1564,9 +1912,33 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         'userApprovalNotes': null,
       }, SetOptions(merge: true));
 
-      _toast(context, 'Approved: Thanks for confirming the fix.');
+      if (!mounted) return;
+
+      // Success modal (auto-closes after 2s)
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.check_circle, color: Colors.green, size: 48),
+              SizedBox(height: 12),
+              Text('Approved', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('Thanks for confirming the fix.', textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      );
+
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close success dialog
     } catch (e) {
-      _toast(context, 'Error: Could not approve the resolution.');
+      if (!mounted) return;
+      await AppMsg.error(context, 'Error', m: 'Could not approve the resolution.');
     }
   }
 
@@ -1598,13 +1970,39 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         'userApprovalNotes': notes.isEmpty ? null : notes,
       }, SetOptions(merge: true));
 
-      _toast(context, 'Noted: We marked this as not resolved. A staff member will review.');
+      if (!mounted) return;
+
+      // Success modal (auto-closes after 2s)
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.check_circle, color: Colors.green, size: 48),
+              SizedBox(height: 12),
+              Text('Declined', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('We noted your feedback. A staff member will review.', textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      );
+
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close success dialog
     } catch (e) {
-      _toast(context, 'Error: Could not decline the resolution.');
+      if (!mounted) return;
+      await AppMsg.error(context, 'Error', m: 'Could not decline the resolution.');
     }
   }
 
 
+
+  // ---------- EDIT SHEET (mirrors your web UX) ----------
   // ---------- EDIT SHEET (mirrors your web UX) ----------
   void _openEditSheet(_ReportItem r) {
     // controllers
@@ -1614,29 +2012,63 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
     final dCtrl = TextEditingController(text: r.additionalDetails ?? '');
 
     // service types (same as web)
+    // service types (same as web)
     const svcTypes = <String>[
       'Facilities and Maintenance',
       'IT Support Services - Hardware',
       'IT Support Services - Software',
     ];
 
-    String svcType = (r.serviceType ?? '').isNotEmpty ? r.serviceType! : '';
+// Canonicalize: lower-case, normalize dashes/whitespace
+    String _canon(String s) {
+      return s
+          .replaceAll(RegExp(r'[\u2012-\u2015\u2212]'), '-') // any unicode dash -> '-'
+          .replaceAll(RegExp(r'\s+'), ' ')                   // collapse spaces
+          .trim()
+          .toLowerCase();
+    }
+
+// Snap an arbitrary incoming string to a known option (or '' if no match)
+    String _snapToOption(String? raw) {
+      final c = _canon(raw ?? '');
+      for (final opt in svcTypes) {
+        if (_canon(opt) == c) return opt; // return the exact label from svcTypes
+      }
+      return ''; // none matched
+    }
+
+// Use snapped option as the initial group value
+    String svcType = _snapToOption(r.serviceType);
+
+
+
+
+
     String? currentImageUrl = r.imageUrl; // existing image in DB
     XFile? newImageFile; // newly chosen; upload on SAVE
     bool saving = false;
+
+    // NEW: track if anything changed
+    bool dirty = false;
 
     Future<void> _pickFromGallery(StateSetter setSheet) async {
       if (saving) return;
       final x = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
       if (x == null) return;
-      setSheet(() => newImageFile = x);
+      setSheet(() {
+        newImageFile = x;
+        dirty = true;
+      });
     }
 
     Future<void> _pickFromCamera(StateSetter setSheet) async {
       if (saving) return;
       final x = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
       if (x == null) return;
-      setSheet(() => newImageFile = x);
+      setSheet(() {
+        newImageFile = x;
+        dirty = true;
+      });
     }
 
     String? _validate() {
@@ -1678,6 +2110,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         final isSW = svcType == 'IT Support Services - Software';
 
         final payload = <String, dynamic>{
+          'uid': _uid,
           'serviceType': svcType,
           'additionalDetails': dCtrl.text.trim(),
           'imageUrl': finalImageUrl,
@@ -1696,8 +2129,38 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         );
 
         if (!mounted) return;
-        Navigator.pop(context);
-        await AppMsg.success(context, 'Updated', m: 'Your report has been updated.');
+
+        // Auto-closing success dialog (2s)
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (c) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.check_circle, color: Colors.green, size: 48),
+                SizedBox(height: 12),
+                Text(
+                  'Updated',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Your report has been updated.',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+
+        // Wait 2 seconds → close dialog → close sheet
+        await Future.delayed(const Duration(seconds: 2));
+        if (!mounted) return;
+        Navigator.of(context).pop(); // close success dialog
+        Navigator.pop(context);      // close bottom sheet
       } catch (e) {
         if (!mounted) return;
         await AppMsg.error(context, 'Update failed', m: e.toString());
@@ -1732,6 +2195,16 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
               color: const Color(0xFF0A1936),
             ));
 
+            // Hook up change listeners once (to set dirty when user types)
+            void _attachDirtyListeners() {
+              bCtrl.removeListener(() {});
+              fCtrl.removeListener(() {});
+              pCtrl.removeListener(() {});
+              dCtrl.removeListener(() {});
+            }
+
+            // Instead of listeners, use onChanged on TextFields below (simpler/clearer)
+
             return Padding(
               padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 16 + bottomInset),
               child: SingleChildScrollView(
@@ -1742,8 +2215,8 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                     Row(
                       children: [
                         const Expanded(
-                          child:
-                          Text('Edit Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          child: Text('Edit Report',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
                         IconButton(
                           onPressed: saving ? null : () => Navigator.pop(context),
@@ -1760,22 +2233,21 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                       spacing: 8,
                       runSpacing: 8,
                       children: svcTypes.map((t) {
-                        final selected = svcType == t;
+                        final selected = svcType == t; // exact, because we snapped svcType
                         return InkWell(
                           onTap: saving ? null : () => setSheet(() => svcType = t),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
-                              border: Border.all(
-                                  color: selected ? const Color(0xFF0A1936) : Colors.grey.shade400),
+                              border: Border.all(color: selected ? Colors.black : Colors.grey.shade400),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(mainAxisSize: MainAxisSize.min, children: [
                               Radio<String>(
                                 value: t,
-                                groupValue: svcType,
+                                groupValue: svcType, // exact match now
                                 onChanged: saving ? null : (v) => setSheet(() => svcType = v ?? ''),
-                                activeColor: const Color(0xFF0A1936),
+                                activeColor: Colors.black,
                               ),
                               Text(t, style: const TextStyle(fontSize: 12)),
                             ]),
@@ -1784,6 +2256,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                       }).toList(),
                     ),
 
+
                     const SizedBox(height: 12),
 
                     // Conditional fields (like web)
@@ -1791,17 +2264,29 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                       const Text('Platform / System Name',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
-                      TextField(controller: pCtrl, decoration: _inputDecoration('e.g., LMS, Library System')),
+                      TextField(
+                        controller: pCtrl,
+                        onChanged: (_) => setSheet(() => dirty = true),
+                        decoration: _inputDecoration('e.g., LMS, Library System'),
+                      ),
                     ] else ...[
                       const Text('Building Name',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
-                      TextField(controller: bCtrl, decoration: _inputDecoration('Enter building name')),
+                      TextField(
+                        controller: bCtrl,
+                        onChanged: (_) => setSheet(() => dirty = true),
+                        decoration: _inputDecoration('Enter building name'),
+                      ),
                       const SizedBox(height: 10),
                       const Text('Floor / Room Location',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
-                      TextField(controller: fCtrl, decoration: _inputDecoration('Enter floor/room')),
+                      TextField(
+                        controller: fCtrl,
+                        onChanged: (_) => setSheet(() => dirty = true),
+                        decoration: _inputDecoration('Enter floor/room'),
+                      ),
                     ],
 
                     const SizedBox(height: 12),
@@ -1847,7 +2332,12 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                             if (newImageFile != null) ...[
                               const SizedBox(height: 8),
                               TextButton(
-                                onPressed: saving ? null : () => setSheet(() => newImageFile = null),
+                                onPressed: saving
+                                    ? null
+                                    : () => setSheet(() {
+                                  newImageFile = null;
+                                  dirty = true; // mark change
+                                }),
                                 child: const Text('Remove new image'),
                               )
                             ]
@@ -1864,6 +2354,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                     TextField(
                       controller: dCtrl,
                       maxLines: 3,
+                      onChanged: (_) => setSheet(() => dirty = true),
                       decoration: _inputDecoration('Describe the issue...'),
                     ),
 
@@ -1879,7 +2370,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: saving ? null : () => _save(setSheet),
+                          onPressed: (!dirty || saving) ? null : () => _save(setSheet),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0A1936),
                             foregroundColor: Colors.white,
@@ -1900,6 +2391,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
 
 
 
+
   // ---------- BUILD ----------
   @override
   Widget build(BuildContext context) {
@@ -1911,20 +2403,21 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'REPORT LOGS',
+          'REPORTED ISSUES',
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
-        actions: [
-          IconButton(
-            tooltip: 'Reconnect live',
-            onPressed: _startRealtime,
-            icon: const Icon(Icons.wifi, color: Colors.black),
-          ),
-        ],
+        // actions: [   <--- remove this block
+        //   IconButton(
+        //     tooltip: 'Reconnect live',
+        //     onPressed: _startRealtime,
+        //     icon: const Icon(Icons.wifi, color: Colors.black),
+        //   ),
+        // ],
       ),
+
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -2010,22 +2503,25 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                     return _ReportTile(
                       item: r,
                       currentUid: _uid,
+                      open: _expandedId == r.id,                             // NEW
+                      onToggle: () => setState(() {                         // NEW
+                        _expandedId = (_expandedId == r.id) ? null : r.id;  // toggle; ensure only one open
+                      }),
+
                       onPreview: r.imageUrl != null ? () => _previewImage(r.imageUrl!) : null,
-                      onPreviewResolved:
-                      (r.resolvedImageUrl != null && r.resolvedImageUrl!.isNotEmpty)
+                      onPreviewResolved: (r.resolvedImageUrl != null && r.resolvedImageUrl!.isNotEmpty)
                           ? () => _previewImage(r.resolvedImageUrl!)
                           : null,
                       onRemoveFromMyLog: r.status.toLowerCase() == 'resolved'
                           ? () => _removeFromMyLog(r)
                           : null,
-                      onEdit: canEdit ? () => _openEditSheet(r) : null,
-                      onApprove: r.status.toLowerCase() == 'resolved'
-                          ? () => _approveResolution(r)
+                      onEdit: (r.status.toLowerCase() == 'pending' && r.collection == 'userReport')
+                          ? () => _openEditSheet(r)
                           : null,
-                      onDecline: r.status.toLowerCase() == 'resolved'
-                          ? () => _declineResolution(r)
-                          : null,
+                      onApprove: r.status.toLowerCase() == 'resolved' ? () => _approveResolution(r) : null,
+                      onDecline: r.status.toLowerCase() == 'resolved' ? () => _declineResolution(r) : null,
                     );
+
                   },
                 ),
               ),
@@ -2176,16 +2672,22 @@ class _ReportTile extends StatefulWidget {
   final _ReportItem item;
   final String? currentUid;
 
-  final VoidCallback? onPreview; // original image
-  final VoidCallback? onPreviewResolved; // resolution image
-  final VoidCallback? onRemoveFromMyLog; // only for Resolved
-  final VoidCallback? onDelete; // optional (not used)
-  final VoidCallback? onEdit; // edit pending item
-  final VoidCallback? onApprove; // user approves resolution
-  final VoidCallback? onDecline; // user declines resolution
+  // NEW: controlled expansion
+  final bool open;
+  final VoidCallback onToggle;
+
+  final VoidCallback? onPreview;           // original image
+  final VoidCallback? onPreviewResolved;   // resolution image
+  final VoidCallback? onRemoveFromMyLog;   // only for Resolved
+  final VoidCallback? onDelete;            // optional (not used)
+  final VoidCallback? onEdit;              // edit pending item
+  final VoidCallback? onApprove;           // user approves resolution
+  final VoidCallback? onDecline;           // user declines resolution
 
   const _ReportTile({
     required this.item,
+    required this.open,         // NEW (required)
+    required this.onToggle,     // NEW (required)
     this.currentUid,
     this.onPreview,
     this.onPreviewResolved,
@@ -2194,6 +2696,7 @@ class _ReportTile extends StatefulWidget {
     this.onEdit,
     this.onApprove,
     this.onDecline,
+    super.key,
   });
 
   @override
@@ -2201,8 +2704,6 @@ class _ReportTile extends StatefulWidget {
 }
 
 class _ReportTileState extends State<_ReportTile> {
-  bool _open = false;
-
   String _fmtDate(Timestamp? ts) {
     if (ts == null) return '—';
     final d = ts.toDate();
@@ -2210,18 +2711,8 @@ class _ReportTileState extends State<_ReportTile> {
   }
 
   static String _mfull(int m) => const [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December'
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December'
   ][m - 1];
   static String _two(int n) => n.toString().padLeft(2, '0');
 
@@ -2245,12 +2736,11 @@ class _ReportTileState extends State<_ReportTile> {
     final approval = (r.userApprovalStatus ?? 'pending').toLowerCase();
     final isOwner = (widget.currentUid != null && widget.currentUid == r.uid);
 
-    // image preview widget
     final Widget preview = (r.imageUrl?.isNotEmpty ?? false)
         ? GestureDetector(
       onTap: widget.onPreview,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         child: Image.network(
           r.imageUrl!,
           width: thumbW,
@@ -2264,30 +2754,38 @@ class _ReportTileState extends State<_ReportTile> {
       height: thumbH,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFF0A1936),
-        borderRadius: BorderRadius.circular(6),
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
-      child: const Text(
-        'No image',
-        style: TextStyle(fontSize: 10, color: Colors.white70),
-      ),
+      child: const Text('No image',
+          style: TextStyle(fontSize: 10, color: Colors.black54)),
     );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF0A1936)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.transparent, width: 0),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 8,
+            offset: Offset(0, 20),
+            color: Color(0x14000000),
+          ),
+        ],
       ),
       child: Column(
         children: [
+          // Header toggles via parent
           InkWell(
-            onTap: () => setState(() => _open = !_open),
+            onTap: widget.onToggle, // NEW
             child: Container(
               height: headerH,
               decoration: const BoxDecoration(
-                color: Color(0xFF0A1936),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
@@ -2297,9 +2795,9 @@ class _ReportTileState extends State<_ReportTile> {
                   Row(
                     children: [
                       Text(
-                        _open ? 'Hide Details' : 'View Details',
+                        widget.open ? 'Hide Details' : 'View Details',
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: Colors.black,
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
@@ -2307,9 +2805,9 @@ class _ReportTileState extends State<_ReportTile> {
                       const SizedBox(width: 6),
                       AnimatedRotation(
                         duration: const Duration(milliseconds: 200),
-                        turns: _open ? 0.5 : 0.0,
-                        child:
-                        const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+                        turns: widget.open ? 0.5 : 0.0,
+                        child: const Icon(Icons.keyboard_arrow_down,
+                            color: Colors.black, size: 18),
                       ),
                     ],
                   )
@@ -2317,223 +2815,253 @@ class _ReportTileState extends State<_ReportTile> {
               ),
             ),
           ),
+
+          // Details
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
-            secondChild: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(11)),
-                border: Border.all(color: Colors.transparent),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // meta + original thumb
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _kv('Building Name', r.buildingName),
-                            _kv('Floor Location', r.floorLocation),
-                            _kv('Service Type', r.serviceType),
-                            _kv('Platform / System Name', platformLine),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0A1936),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.all(6),
-                        child: preview,
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-                  const Text('Report Details',
-                      style:
-                      TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey)),
-                  const SizedBox(height: 4),
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        const TextSpan(
-                            text: 'Other Details: ',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
-                        TextSpan(text: r.additionalDetails ?? '—'),
-                      ],
-                    ),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-
-                  if (isResolved) ...[
-                    const SizedBox(height: 12),
-                    const Divider(),
-                    const SizedBox(height: 6),
-
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 6,
-                            children: [
-                              Text(r.resolvedByName?.isNotEmpty == true ? r.resolvedByName! : '—',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600, fontSize: 12)),
-                              const Text('•', style: TextStyle(color: Colors.grey)),
-                              Text(r.resolvedByDept?.isNotEmpty == true ? r.resolvedByDept! : '—',
-                                  style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                              const Text('•', style: TextStyle(color: Colors.grey)),
-                              Text(_fmtDate(r.resolvedAt),
-                                  style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0A1936),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          padding: const EdgeInsets.all(6),
-                          child: (r.resolvedImageUrl?.isNotEmpty ?? false)
-                              ? GestureDetector(
-                            onTap: widget.onPreviewResolved,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Image.network(
-                                r.resolvedImageUrl!,
-                                width: thumbW,
-                                height: thumbH,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          )
-                              : Container(
-                            width: thumbW,
-                            height: thumbH,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0A1936),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text('No image',
-                                style: TextStyle(fontSize: 10, color: Colors.white70)),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 8),
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          const TextSpan(
-                              text: 'Resolution Summary: ',
-                              style: TextStyle(fontWeight: FontWeight.w600)),
-                          TextSpan(text: r.resolutionNotes ?? '—'),
-                        ],
-                      ),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-
-                    // Only original reporter, while approval is pending
-                    if (isOwner && approval == 'pending') ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: widget.onApprove,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10)),
-                              ),
-                              child: const Text('Approve — Issue Resolved'),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: widget.onDecline,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10)),
-                              ),
-                              child: const Text('Decline — Not Resolved'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: widget.onRemoveFromMyLog,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: EdgeInsets.symmetric(
-                            vertical: (size.height * 0.015).clamp(10.0, 14.0),
-                          ),
-                        ),
-                        child: const Text('Remove from My Log'),
-                      ),
-                    ),
-                  ],
-
-                  if (canEdit) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: widget.onEdit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0A1936),
-                          foregroundColor: Colors.white,
-                          shape:
-                          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        child: const Text('Edit Report'),
-                      ),
-                    ),
-                  ],
-
-                  if (!isResolved && widget.onDelete != null) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: widget.onDelete,
-                        child: const Text('Delete (admin)'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            crossFadeState: _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            secondChild: _details(context, r, isResolved, canEdit, isOwner, approval, size, preview, thumbW, thumbH),
+            crossFadeState: widget.open
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 220),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _details(
+      BuildContext context,
+      _ReportItem r,
+      bool isResolved,
+      bool canEdit,
+      bool isOwner,
+      String approval,
+      Size size,
+      Widget preview,
+      double thumbW,
+      double thumbH,
+      ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(11)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // meta + original thumb
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _kv('Building Name', r.buildingName),
+                    _kv('Floor Location', r.floorLocation),
+                    _kv('Service Type', r.serviceType),
+                    _kv('Platform / System Name', r.platformName ?? r.systemName ?? r.platform),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                padding: const EdgeInsets.all(6),
+                child: preview,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+          const Text(
+            'Report Details',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(
+                    text: 'Other Details: ',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                TextSpan(text: r.additionalDetails ?? '—'),
+              ],
+            ),
+            style: const TextStyle(fontSize: 14, color: Colors.black),
+          ),
+
+          if (isResolved) ...[
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 6),
+
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    children: [
+                      Text(
+                        r.resolvedByName?.isNotEmpty == true ? r.resolvedByName! : '—',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                      const Text('•', style: TextStyle(color: Colors.grey)),
+                      Text(
+                          r.resolvedByDept?.isNotEmpty == true ? r.resolvedByDept! : '—',
+                          style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                      const Text('•', style: TextStyle(color: Colors.grey)),
+                      Text(_fmtDate(r.resolvedAt),
+                          style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  child: (r.resolvedImageUrl?.isNotEmpty ?? false)
+                      ? GestureDetector(
+                    onTap: widget.onPreviewResolved,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        r.resolvedImageUrl!,
+                        width: thumbW,
+                        height: thumbH,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  )
+                      : Container(
+                    width: thumbW,
+                    height: thumbH,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: const Text('No image',
+                        style: TextStyle(fontSize: 10, color: Colors.black54)),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+            Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(
+                      text: 'Resolution Summary: ',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  TextSpan(text: r.resolutionNotes ?? '—'),
+                ],
+              ),
+              style: const TextStyle(fontSize: 14, color: Colors.black),
+            ),
+
+            if (isOwner && approval == 'pending') ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: widget.onApprove,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Approve — Issue Resolved'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: widget.onDecline,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Decline — Not Resolved'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 12),
+            ],
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: widget.onRemoveFromMyLog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: EdgeInsets.symmetric(
+                    vertical: (size.height * 0.015).clamp(10.0, 14.0),
+                  ),
+                ),
+                child: const Text('Remove from My Log'),
+              ),
+            ),
+          ],
+
+          if (canEdit) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: widget.onEdit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black87,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('Edit Report'),
+              ),
+            ),
+          ],
+
+          if (!isResolved && widget.onDelete != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: widget.onDelete,
+                child: const Text('Delete (admin)'),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2544,11 +3072,19 @@ class _ReportTileState extends State<_ReportTile> {
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
         '$k: ${v?.isNotEmpty == true ? v : '—'}',
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.black,
+        ),
       ),
     );
   }
 }
+
+
+
+
 
 class _StatusChip extends StatelessWidget {
   final String status;
@@ -2570,7 +3106,7 @@ class _StatusChip extends StatelessWidget {
         bg = Colors.red;
       } else {
         text = 'Resolved (Pending Your Approval)';
-        bg = Colors.orange;
+        bg = Colors.green;
       }
     } else if (s == 'on process') {
       bg = Colors.orange;
@@ -2582,10 +3118,10 @@ class _StatusChip extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
       child: Text(
         text,
-        style: const TextStyle(color: Colors.white, fontSize: 12),
+        style: const TextStyle(color: Colors.white, fontSize: 11),
       ),
     );
   }
@@ -2626,20 +3162,79 @@ class _ProfilePageState extends State<ProfilePage> {
   final Color pink = const Color(0xFFE91E63);
 
   Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Confirm Logout',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(c).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     try {
       await FirebaseAuth.instance.signOut();
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('uid');
       await prefs.remove('role');
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error signing out')),
+
+      // Show auto-closing dialog for 2 seconds
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.check_circle, color: Colors.green, size: 48),
+              SizedBox(height: 12),
+              Text(
+                'Logged out',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'You have been signed out successfully.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       );
+
+      // Wait 2 seconds then close dialog and go to login
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close the dialog
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
+    } catch (e) {
+      if (!mounted) return;
+      await AppMsg.error(context, 'Logout failed', m: e.toString());
     }
   }
+
+
+
+
 
   @override
   Widget build(BuildContext context) {

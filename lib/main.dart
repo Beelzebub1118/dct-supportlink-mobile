@@ -9,8 +9,6 @@ import 'login.dart';
 import 'dashboard.dart';
 import 'notification_service.dart';
 
-/// Required for background messages on Android.
-/// Keep this top-level (outside any class).
 @pragma('vm:entry-point')
 Future<void> _firebaseBackground(RemoteMessage message) async {
   await NotificationService.firebaseMessagingBackgroundHandler(message);
@@ -23,7 +21,6 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Register background handler before runApp.
   FirebaseMessaging.onBackgroundMessage(_firebaseBackground);
 
   runApp(const MyApp());
@@ -41,21 +38,15 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-
-    // Wait for a BuildContext, then init notification handlers & save token.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Foreground notifications + permission + local channel
       await NotificationService.initForegroundHandlers(context);
 
-      // If already logged in, save current token
       if (FirebaseAuth.instance.currentUser != null) {
         await NotificationService.saveTokenToFirestore(context);
       }
 
-      // Keep FCM token fresh in Firestore
       NotificationService.listenTokenRefresh(context);
 
-      // Save token whenever auth state changes to a logged-in user
       _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
         if (user != null) {
           await NotificationService.saveTokenToFirestore(context);

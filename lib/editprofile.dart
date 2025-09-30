@@ -31,17 +31,56 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   final Color _pink = const Color(0xFFE91E63);
 
+  // current data
   String _photoUrl = '';
   File? _newImageFile;
+
+  // initial data (to detect changes)
+  String _initialName = '';
+  String _initialRole = '';
+  String _initialDept = '';
+  String _initialPhotoUrl = '';
+
   bool _saving = false;
   bool _seeded = false;
 
   OverlayEntry? _tipEntry; // active tooltip
+
+  // Cloudinary
   static const String _cloudName = 'dsycysb0e';
   static const String _uploadPreset = 'supportlink';
 
+  // ---- CHANGE DETECTION ----
+  bool get _isDirty {
+    final name = _nameCtl.text.trim();
+    final role = _roleCtl.text.trim();
+    final dept = _deptCtl.text.trim();
+    final textChanged =
+        name != _initialName || role != _initialRole || dept != _initialDept;
+    final photoChanged = _newImageFile != null; // picking a new photo
+    return textChanged || photoChanged;
+  }
+
+  void _onFieldsChanged() {
+    // just trigger rebuild so the Save button updates enabled/disabled state
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // watch for edits
+    _nameCtl.addListener(_onFieldsChanged);
+    _roleCtl.addListener(_onFieldsChanged);
+    _deptCtl.addListener(_onFieldsChanged);
+  }
+
   @override
   void dispose() {
+    _nameCtl.removeListener(_onFieldsChanged);
+    _roleCtl.removeListener(_onFieldsChanged);
+    _deptCtl.removeListener(_onFieldsChanged);
+
     _nameCtl.dispose();
     _roleCtl.dispose();
     _deptCtl.dispose();
@@ -60,7 +99,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
       imageQuality: 85,
     );
     if (file != null) {
-      setState(() => _newImageFile = File(file.path));
+      setState(() {
+        _newImageFile = File(file.path);
+      });
+      _onFieldsChanged();
     }
   }
 
@@ -89,7 +131,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Future<void> _showFieldTip(GlobalKey key, String message) async {
     _removeTip();
 
-    // Ensure the field is visible first
     final ctx = key.currentContext;
     if (ctx != null) {
       await Scrollable.ensureVisible(
@@ -109,7 +150,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final fieldSize = box.size;
     final fieldPos = box.localToGlobal(Offset.zero);
 
-    // Position: centered under the text field, slightly overlapping the top border
     final left = fieldPos.dx + (fieldSize.width / 2) - 120; // 240 = tooltip width
     final top = fieldPos.dy - 46; // above the field
 
@@ -139,12 +179,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final role = _roleCtl.text.trim();
     final dept = _deptCtl.text.trim();
 
-    // keep whatever field-level popovers/validation you already have
     if (name.isEmpty || role.isEmpty || dept.isEmpty) {
       await AppMsg.incompleteForm(
         context,
         custom: 'Please complete Name, Role, and Department.',
       );
+      return;
+    }
+
+    if (!_isDirty) {
+      // nothing changed; keep button disabled anyway, but we guard here too
       return;
     }
 
@@ -170,7 +214,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       if (!mounted) return;
 
-      // ✅ Show centered modal like your web:
       await AppMsg.success(
         context,
         'Profile Updated',
@@ -216,11 +259,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
         stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
         builder: (context, snap) {
           final data = snap.data?.data() ?? {};
+          // Seed form once with Firestore data
           if (!_seeded && data.isNotEmpty) {
             _nameCtl.text = (data['name'] as String?)?.trim() ?? '';
             _roleCtl.text = (data['role'] as String?)?.trim() ?? '';
             _deptCtl.text = (data['department'] as String?)?.trim() ?? '';
             _photoUrl = (data['photoUrl'] as String?)?.trim() ?? '';
+
+            // set initial snapshot to compare against
+            _initialName = _nameCtl.text.trim();
+            _initialRole = _roleCtl.text.trim();
+            _initialDept = _deptCtl.text.trim();
+            _initialPhotoUrl = _photoUrl;
+
             _seeded = true;
           }
 
@@ -254,17 +305,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 width: radius * 2,
                                 height: radius * 2,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(
-                                  Icons.person,
-                                  size: 50,
-                                  color: Colors.white,
-                                ),
+                                errorBuilder: (_, __, ___) =>
+                                const Icon(Icons.person, size: 50, color: Colors.white),
                               )
-                                  : const Icon(
-                                Icons.person,
-                                size: 50,
-                                color: Colors.white,
-                              )),
+                                  : const Icon(Icons.person, size: 50, color: Colors.white)),
                             ),
                           ),
                           Material(
@@ -329,7 +373,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                     // Save
                     ElevatedButton(
-                      onPressed: _saving ? null : _save,
+                      onPressed: (_saving || !_isDirty) ? null : _save,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _pink,
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -338,7 +382,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         ),
                       ),
                       child: Text(
-                        _saving ? 'SAVING…' : 'SAVE',
+                        _saving ? 'SAVING…' : 'SAVE CHANGES',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

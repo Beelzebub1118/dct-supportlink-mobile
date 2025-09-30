@@ -1,4 +1,3 @@
-// lib/notification_service.dart
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,7 +11,9 @@ class NotificationService {
   static final _db = FirebaseFirestore.instance;
 
   // ----- Local notifications (foreground) -----
-  static final _local = FlutterLocalNotificationsPlugin();
+  static final FlutterLocalNotificationsPlugin local =
+  FlutterLocalNotificationsPlugin();
+
   static const AndroidNotificationChannel _androidChannel =
   AndroidNotificationChannel(
     'high_importance_channel',
@@ -21,30 +22,35 @@ class NotificationService {
     description: 'General notifications for SupportLink',
   );
 
+  static bool _inited = false;
+
   /// Call once (e.g., from MyApp.initState after build) to set up listeners
   static Future<void> initForegroundHandlers(BuildContext context) async {
+    if (_inited) return;
+    _inited = true;
+
     // iOS / Android 13+ permission
     await _messaging.requestPermission(alert: true, badge: true, sound: true);
 
     // Local notifications init
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings();
-    await _local.initialize(const InitializationSettings(
+    await local.initialize(const InitializationSettings(
       android: androidInit,
       iOS: iosInit,
     ));
 
     // Create Android channel
-    await _local
+    await local
         .resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_androidChannel);
 
-    // Foreground: show a local notification so the user sees something
+    // Foreground messages: show a local notification
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final n = message.notification;
       if (n != null) {
-        _local.show(
+        local.show(
           n.hashCode,
           n.title ?? 'Notification',
           n.body ?? '',
@@ -65,14 +71,15 @@ class NotificationService {
     // App opened from a notification (tap while app in background)
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       // Optional: Navigate using message.data['route']
+      // Do not show another dialog here to avoid duplicates.
     });
   }
 
-  /// Background handler (must be a top-level function; wire in main.dart)
+  /// Background handler (must be a top-level function; wired in main.dart)
   static Future<void> firebaseMessagingBackgroundHandler(
       RemoteMessage message) async {
     // If you need background processing, you can initialize firebase here.
-    // WidgetsBinding not available here.
+    // Keep in mind: no BuildContext / UI here.
   }
 
   /// Save token under users/{uid}/fcmTokens/{token}
