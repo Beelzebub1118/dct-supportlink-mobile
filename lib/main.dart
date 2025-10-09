@@ -1,3 +1,4 @@
+// lib/main.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -11,7 +12,8 @@ import 'notification_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseBackground(RemoteMessage message) async {
-  await NotificationService.firebaseMessagingBackgroundHandler(message);
+  // Keep empty to avoid double-showing; we handle local notifs in foreground.
+
 }
 
 Future<void> main() async {
@@ -21,6 +23,7 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Background FCM handler (must be a top-level/annotated function).
   FirebaseMessaging.onBackgroundMessage(_firebaseBackground);
 
   runApp(const MyApp());
@@ -38,26 +41,32 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+
+    // Delay until a frame is available so `context` is safe for NotificationService.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // 1) Init local notifications + FCM foreground handling.
       await NotificationService.initForegroundHandlers(context);
 
-      if (FirebaseAuth.instance.currentUser != null) {
-        await NotificationService.saveTokenToFirestore(context);
-      }
-
+      // 2) Keep token fresh
       NotificationService.listenTokenRefresh(context);
 
-      _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
-        if (user != null) {
-          await NotificationService.saveTokenToFirestore(context);
-        }
-      });
+      // 3) React to login/logout and start/stop the Firestore watcher
+      _authSub =
+          FirebaseAuth.instance.authStateChanges().listen((User? user) async {
+            if (user != null) {
+              await NotificationService.saveTokenToFirestore(context);
+              NotificationService.startStatusWatch(); // ✅ start only here
+            } else {
+              NotificationService.stopStatusWatch(); // ✅ stop on logout
+            }
+          });
     });
   }
 
   @override
   void dispose() {
     _authSub?.cancel();
+    NotificationService.stopStatusWatch();
     super.dispose();
   }
 
@@ -75,9 +84,8 @@ class _MyAppState extends State<MyApp> {
         '/login': (_) => const LoginScreen(),
         '/dashboard': (_) => const Dashboard(),
       },
-      onUnknownRoute: (_) => MaterialPageRoute(
-        builder: (_) => const LoginScreen(),
-      ),
+      onUnknownRoute: (_) =>
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
   }
 }

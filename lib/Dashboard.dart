@@ -13,7 +13,7 @@ import 'ui_messages.dart';
 import 'dart:async';
 import 'package:rxdart/rxdart.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'report_status_watcher.dart';
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 class ReportStatusWatcher {
@@ -584,13 +584,7 @@ class _DashboardState extends State<Dashboard> {
                         border: Border.all(color: Colors.grey.shade400),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        "Note: For complex issues, please contact:\n"
-                            "- CSD (for plumbing)\n"
-                            "- Maintenance (for electrical/AC)\n"
-                            "- Facilities (for furniture/doors)",
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                      ),
+
                     ),
 
 
@@ -711,87 +705,90 @@ class _DashboardState extends State<Dashboard> {
 
 class ReportModulePage extends StatefulWidget {
   const ReportModulePage({super.key});
-
   @override
   State<ReportModulePage> createState() => _ReportModulePageState();
 }
 
 class _ReportModulePageState extends State<ReportModulePage> {
-
-  // Form state
-  final _buildingCtrl = TextEditingController();
-  final _floorCtrl = TextEditingController();
+  // Form controllers
+  final _buildingCtrl = TextEditingController(); // kept for compatibility (unused with dropdown)
+  final _floorCtrl = TextEditingController(); // text field again
+  final _platformCtrl = TextEditingController(); // software only
   final _detailsCtrl = TextEditingController();
 
-  String? _serviceType; // 'Facilities and Maintenance' | 'IT Support Services'
-  final _serviceTypes = const [
-    'Facilities and Maintenance',
-    'IT Support Services - Software',
-    'IT Support Services - Hardware',
+  // Service types (match web)
+  static const String svcFM   = 'Facilities and Maintenance';
+  static const String svcITSW = 'IT Support Services - Software';
+  static const String svcITHW = 'IT Support Services - Hardware';
+  static const List<String> _serviceTypes = [svcFM, svcITSW, svcITHW];
+
+  String? _serviceType; // null = chooser screen (like web first page)
+
+  // ----- Building dropdown options -----
+  static const List<Map<String, String>> _kBuildings = [
+    {'value': 'SD',  'label': 'SD - St. Dominic BLDG'},
+    {'value': 'HR',  'label': 'HR - Holy Rosary BLDG'},
+    {'value': 'OLP', 'label': 'OLP - Our Lady of Peace BLDG'},
+    {'value': 'SLR', 'label': 'SLR - San Lorenzo BLDG'},
+    {'value': 'OLF', 'label': 'OLF - Our Lady of Fatima BLDG'},
+    {'value': 'SCS', 'label': 'SCS - St. Catherine of Siena BLDG'},
   ];
-  // Image state
+  String? _buildingValue; // selected building code (e.g., "SD")
+
+  // Image
   final _picker = ImagePicker();
   XFile? _pickedImage;
 
-  // UI state
+  // UI
   bool _submitting = false;
+  bool _showHelp = false;
 
-  // Colors (kept consistent with your theme)
-  final Color _pink = const Color(0xFFE91E63);
+  // Colors
+  final Color _brand = const Color(0xFFEB58B5); // submit button uses this (same as before)
+  final Color _pink  = const Color(0xFFEB58B5);
 
   @override
   void dispose() {
     _buildingCtrl.dispose();
     _floorCtrl.dispose();
+    _platformCtrl.dispose();
     _detailsCtrl.dispose();
     super.dispose();
   }
 
-  // ---- Image pickers
+  // ---------- Image pickers ----------
   Future<void> _chooseImage() async {
     if (_submitting) return;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) {
-        return SafeArea(
-          child: Wrap(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Pick from gallery'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final file = await _picker.pickImage(
-                    source: ImageSource.gallery,
-                    imageQuality: 85,
-                    maxWidth: 1600,
-                  );
-                  if (file != null && mounted) {
-                    setState(() => _pickedImage = file);
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera),
-                title: const Text('Take a photo'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final file = await _picker.pickImage(
-                    source: ImageSource.camera,
-                    imageQuality: 85,
-                    maxWidth: 1600,
-                  );
-                  if (file != null && mounted) {
-                    setState(() => _pickedImage = file);
-                  }
-                },
-              ),
-              const SizedBox(height: 6),
-            ],
+      builder: (_) => SafeArea(
+        child: Wrap(children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library),
+            title: const Text('Pick from gallery'),
+            onTap: () async {
+              Navigator.pop(context);
+              final file = await _picker.pickImage(
+                source: ImageSource.gallery, imageQuality: 85, maxWidth: 1600,
+              );
+              if (file != null && mounted) setState(() => _pickedImage = file);
+            },
           ),
-        );
-      },
+          ListTile(
+            leading: const Icon(Icons.photo_camera),
+            title: const Text('Take a photo'),
+            onTap: () async {
+              Navigator.pop(context);
+              final file = await _picker.pickImage(
+                source: ImageSource.camera, imageQuality: 85, maxWidth: 1600,
+              );
+              if (file != null && mounted) setState(() => _pickedImage = file);
+            },
+          ),
+          const SizedBox(height: 6),
+        ]),
+      ),
     );
   }
 
@@ -800,65 +797,47 @@ class _ReportModulePageState extends State<ReportModulePage> {
     setState(() => _pickedImage = null);
   }
 
-  // Hold-to-preview
   void _previewImage() {
     if (_pickedImage == null) return;
     showDialog<void>(
       context: context,
+      useRootNavigator: true,
       barrierColor: Colors.black87,
       builder: (_) => GestureDetector(
-        onTap: () => Navigator.pop(context),
-        child: Stack(
-          children: [
-            Center(
-              child: InteractiveViewer(
-                child: Image.file(File(_pickedImage!.path)),
-              ),
+        onTap: () => Navigator.of(context, rootNavigator: true).pop(),
+        child: Stack(children: [
+          Center(child: InteractiveViewer(child: Image.file(File(_pickedImage!.path)))),
+          Positioned(
+            top: 24, right: 24,
+            child: IconButton(
+              style: IconButton.styleFrom(backgroundColor: Colors.black54),
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
             ),
-            Positioned(
-              top: 24,
-              right: 24,
-              child: IconButton(
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black54,
-                ),
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }
 
-  // ---- Cloudinary upload (same as your web app)
+  // ---------- Cloudinary ----------
   Future<String?> _uploadToCloudinary(XFile file) async {
     final uri = Uri.parse('https://api.cloudinary.com/v1_1/dsycysb0e/image/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['upload_preset'] = 'supportlink'
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          await file.readAsBytes(),
-          filename: file.name,
-        ),
-      );
-
+      ..files.add(http.MultipartFile.fromBytes('file', await file.readAsBytes(), filename: file.name));
     final streamResp = await req.send();
     final resp = await http.Response.fromStream(streamResp);
     if (resp.statusCode == 200) {
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       return data['secure_url'] as String?;
-    } else {
-      debugPrint('Cloudinary upload failed: ${resp.statusCode} ${resp.body}');
-      return null;
     }
+    return null;
   }
 
-  // ---- Submit
+  // ---------- Submit ----------
   Future<void> _submit() async {
-    final building = _buildingCtrl.text.trim();
+    final platform = _platformCtrl.text.trim();
     final floor = _floorCtrl.text.trim();
     final details = _detailsCtrl.text.trim();
     final service = _serviceType;
@@ -870,104 +849,74 @@ class _ReportModulePageState extends State<ReportModulePage> {
       return;
     }
 
-    if (building.isEmpty || floor.isEmpty || service == null || image == null) {
-      // Auto-closing error dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.error, color: Colors.red, size: 48),
-              SizedBox(height: 12),
-              Text(
-                'Incomplete Form',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Please complete all required fields and select an image.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) Navigator.of(context).pop(); // close dialog
+    // Validation mirrors your web rules — show AppMsg dialogs
+    if (service == null || image == null || details.isEmpty) {
+      await AppMsg.incompleteForm(context, custom: 'Please complete all required fields and select an image.');
       return;
+    }
+    if (service == svcITSW) {
+      if (platform.isEmpty) {
+        await AppMsg.incompleteForm(context, custom: 'Please enter the Platform / System Name.');
+        return;
+      }
+    } else {
+      if (_buildingValue == null || floor.isEmpty) {
+        await AppMsg.incompleteForm(context, custom: 'Please choose building and enter floor/room location.');
+        return;
+      }
     }
 
     setState(() => _submitting = true);
     try {
-      // 1) Upload image first
       final imageUrl = await _uploadToCloudinary(image);
       if (imageUrl == null) {
         await AppMsg.uploadFailed(context);
         return;
       }
 
-      // 2) Create Firestore doc
-      await FirebaseFirestore.instance.collection('userReport').add({
-        'uid': uid,
+      // Map selected building code to its label for storing
+      String? buildingLabel;
+      if (_buildingValue != null) {
+        buildingLabel = _kBuildings.firstWhere(
+              (e) => e['value'] == _buildingValue,
+          orElse: () => const {'label': ''},
+        )['label'];
+      }
+
+      final base = <String, dynamic>{
         'serverTimeStamp': FieldValue.serverTimestamp(),
-        'buildingName': building,
-        'floorLocation': floor,
         'serviceType': service,
         'additionalDetails': details,
         'imageUrl': imageUrl,
+        'uid': uid,
         'status': 'Pending',
-      });
+      };
 
-      // 3) Reset fields
-      _buildingCtrl.clear();
+      final payload = (service == svcITSW)
+          ? {...base, 'platformName': platform}
+          : {...base, 'buildingName': buildingLabel, 'floorLocation': floor};
+
+      await FirebaseFirestore.instance.collection('userReport').add(payload);
+
+      // reset
+      _platformCtrl.clear();
       _floorCtrl.clear();
       _detailsCtrl.clear();
       setState(() {
-        _serviceType = null;
         _pickedImage = null;
+        _buildingValue = null;
       });
 
-      // ✅ Success modal (auto-close after 2s)
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.check_circle, color: Colors.green, size: 48),
-              SizedBox(height: 12),
-              Text(
-                'Submitted',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Your report has been submitted successfully.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) Navigator.of(context).pop(); // close success dialog
+      await AppMsg.reportSubmitted(context);
+      if (mounted) setState(() => _serviceType = null); // back to chooser
     } catch (e) {
-      debugPrint('Error submitting report: $e');
       await AppMsg.reportSubmitFailed(context);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-
+  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -976,163 +925,198 @@ class _ReportModulePageState extends State<ReportModulePage> {
     final imgH = (size.height * 0.22).clamp(140.0, 220.0);
     final btnVPad = (size.height * 0.02).clamp(12.0, 18.0);
 
-    return Stack(
-      children: [
-        Scaffold(
-          backgroundColor: Colors.white,
-          body: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(edge, edge * 3, edge, edge),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // BUILDING NAME
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
-                      child: Text('BUILDING NAME',
-                          style: TextStyle(color: Colors.black, fontSize: labelFS)),
+    return Stack(children: [
+      Scaffold(
+        backgroundColor: Colors.white,
+        body: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(edge, edge * 2.2, edge, edge),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ======= CHOOSER =======
+                  if (_serviceType == null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => setState(() => _showHelp = true),
+                          icon: const Icon(Icons.info_outline, size: 18),
+                          label: const Text('Know about service types'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.black87,
+                            backgroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.black12),
+                          ),
+                        ),
+                      ],
                     ),
-                    _buildTextField(controller: _buildingCtrl),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Choose a service type for your report:',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 10),
+
+                    LayoutBuilder(builder: (c, bc) {
+                      final isWide = bc.maxWidth >= 420;
+                      return GridView.count(
+                        shrinkWrap: true,
+                        crossAxisCount: isWide ? 2 : 1,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [
+                          _ServiceCard(
+                            title: svcFM,
+                            desc: 'Repairs, cleanliness, lighting, aircon, plumbing, room fixtures, etc.',
+                            onTap: () => setState(() => _serviceType = svcFM),
+                          ),
+                          _ServiceCard(
+                            title: svcITSW,
+                            desc: 'Issues with school web apps/portals, DCT Schoology, logins, errors.',
+                            onTap: () => setState(() => _serviceType = svcITSW),
+                          ),
+                          _ServiceCard(
+                            title: svcITHW,
+                            desc: 'PCs, printers, projectors, network ports, cables, peripherals.',
+                            onTap: () => setState(() => _serviceType = svcITHW),
+                          ),
+                        ],
+                      );
+                    }),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // ======= FORM =======
+                  if (_serviceType != null) ...[
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => _serviceType = null),
+                        icon: const Icon(Icons.chevron_left, size: 18),
+                        label: const Text('Change service type'),
+                      ),
+                    ),
+
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Selected service type', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                          Text(_serviceType!, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (_serviceType == svcITSW) ...[
+                      _label('PLATFORM / SYSTEM NAME', labelFS),
+                      _textField(controller: _platformCtrl, hint: 'e.g., LMS (Moodle), Student Portal'),
+                      const SizedBox(height: 20),
+                    ] else ...[
+                      _label('BUILDING NAME', labelFS),
+                      _buildingDropdown(), // <<< dropdown here
+                      const SizedBox(height: 20),
+
+                      _label('FLOOR / ROOM LOCATION', labelFS),
+                      _textField(controller: _floorCtrl, hint: 'e.g., 3/F Room 305'),
+                      const SizedBox(height: 20),
+                    ],
+
+                    _label('UPLOAD IMAGE', labelFS),
+                    _imagePicker(imgH),
                     const SizedBox(height: 20),
 
-                    // FLOOR LOCATION
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
-                      child: Text('FLOOR LOCATION',
-                          style: TextStyle(color: Colors.black, fontSize: labelFS)),
-                    ),
-                    _buildTextField(controller: _floorCtrl),
-                    const SizedBox(height: 20),
-
-                    // SERVICE TYPE
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
-                      child: Text('SERVICE TYPE',
-                          style: TextStyle(color: Colors.black, fontSize: labelFS)),
-                    ),
-                    _buildServiceTypeDropdown(),
-                    const SizedBox(height: 20),
-
-                    // UPLOAD IMAGE
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
-                      child: Text('UPLOAD IMAGE',
-                          style: TextStyle(color: Colors.black, fontSize: labelFS)),
-                    ),
-                    _buildImagePicker(imgH: imgH),
-                    const SizedBox(height: 20),
-
-                    // OTHER DETAILS
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
-                      child: Text('OTHER DETAILS',
-                          style: TextStyle(color: Colors.black, fontSize: labelFS)),
-                    ),
-                    _buildTextField(controller: _detailsCtrl, maxLines: 4),
+                    _label('OTHER DETAILS', labelFS),
+                    _textField(controller: _detailsCtrl, maxLines: 4),
                     const SizedBox(height: 30),
 
-                    // SUBMIT
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _submitting ? null : _submit,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:  const Color(0xFFEB58B5),
+                          backgroundColor: _brand,
                           padding: EdgeInsets.symmetric(vertical: btnVPad),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: _submitting
-                            ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                            : const Text(
-                          'SUBMIT',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                            ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Text('SUBMIT', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
           ),
         ),
+      ),
 
-        // Loading overlay
-        if (_submitting)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Container(
-                color: Colors.black.withOpacity(0.4),
-              ),
-            ),
-          ),
-      ],
-    );
+      if (_showHelp)
+        _HelpSheet(
+          onClose: () => setState(() => _showHelp = false),
+          brand: _brand,
+        ),
+
+      if (_submitting)
+        Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black.withOpacity(0.4)))),
+    ]);
   }
 
-  // ---- UI helpers
-  Widget _buildTextField({required TextEditingController controller, int maxLines = 1}) {
+  // ---- Small UI helpers ----
+  Widget _label(String text, double fs) =>
+      Padding(padding: const EdgeInsets.only(left: 8, bottom: 4), child: Text(text, style: TextStyle(fontSize: fs, color: Colors.black)));
+
+  Widget _textField({required TextEditingController controller, int maxLines = 1, String? hint}) {
     final size = MediaQuery.of(context).size;
     return TextField(
       controller: controller,
       maxLines: maxLines,
       decoration: InputDecoration(
+        hintText: hint,
         filled: true,
         fillColor: Colors.grey[100],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: (size.height * 0.017).clamp(12.0, 16.0),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: (size.height * 0.017).clamp(12.0, 16.0)),
       ),
     );
   }
 
-  Widget _buildServiceTypeDropdown() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: DropdownButtonFormField<String>(
-        value: _serviceType,
-        decoration: InputDecoration(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          filled: true,
-          fillColor: Colors.transparent,
-        ),
-        hint: const Text('Select service type'),
-        items: _serviceTypes.map((s) => DropdownMenuItem<String>(value: s, child: Text(s))).toList(),
-        onChanged: (v) => setState(() => _serviceType = v),
+  // Building dropdown widget
+  Widget _buildingDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _buildingValue,
+      isExpanded: true,
+      items: _kBuildings
+          .map((e) => DropdownMenuItem<String>(
+        value: e['value'],
+        child: Text(e['label']!),
+      ))
+          .toList(),
+      onChanged: (v) => setState(() => _buildingValue = v),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.grey[100],
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }
 
-  Widget _buildImagePicker({required double imgH}) {
+  Widget _imagePicker(double imgH) {
     return GestureDetector(
       onTap: _pickedImage == null ? _chooseImage : null,
-      onLongPress: _pickedImage != null ? _previewImage : null, // hold-to-preview
+      onLongPress: _pickedImage != null ? _previewImage : null,
       child: Container(
         height: imgH,
         decoration: BoxDecoration(
@@ -1140,68 +1124,148 @@ class _ReportModulePageState extends State<ReportModulePage> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey[300]!),
         ),
-        child: Stack(
-          children: [
-            // Placeholder or image
-            Positioned.fill(
-              child: _pickedImage == null
-                  ? Center(
-                child: Text(
-                  'Tap to upload image',
-                  style: TextStyle(color: Colors.grey[500]),
-                ),
-              )
-                  : ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  File(_pickedImage!.path),
-                  fit: BoxFit.cover,
-                ),
+        child: Stack(children: [
+          Positioned.fill(
+            child: _pickedImage == null
+                ? Center(child: Text('Tap to upload image', style: TextStyle(color: Colors.grey[500])))
+                : ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(File(_pickedImage!.path), fit: BoxFit.cover),
+            ),
+          ),
+          if (_pickedImage != null)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: _removeImage,
+                style: IconButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.all(8)),
+                icon: const Icon(Icons.delete, color: Colors.white, size: 20),
               ),
             ),
-
-            // Remove button
-            if (_pickedImage != null)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Row(
-                  children: [
-                    const SizedBox(width: 4),
-                    IconButton(
-                      onPressed: _removeImage,
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        padding: const EdgeInsets.all(8),
-                      ),
-                      icon: const Icon(Icons.delete, color: Colors.white, size: 20),
-                    ),
-                  ],
+          if (_pickedImage != null)
+            Positioned(
+              bottom: 8,
+              left: 8,
+              child: ElevatedButton.icon(
+                onPressed: _chooseImage,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black.withOpacity(0.55),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
+                icon: const Icon(Icons.photo_library, size: 18),
+                label: const Text('Change'),
               ),
+            ),
+        ]),
+      ),
+    );
+  }
+}
 
-            // Pick button (if image exists)
-            if (_pickedImage != null)
-              Positioned(
-                bottom: 8,
-                left: 8,
-                child: ElevatedButton.icon(
-                  onPressed: _chooseImage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black.withOpacity(0.55),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: const Icon(Icons.photo_library, size: 18),
-                  label: const Text('Change'),
-                ),
-              ),
-          ],
+
+
+// ====== Service card (web-style) with background watermark logo ======
+class _ServiceCard extends StatelessWidget {
+  final String title;
+  final String desc;
+  final VoidCallback onTap;
+  const _ServiceCard({required this.title, required this.desc, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.black54),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Stack(children: [
+          // background watermark (assets/dctLogo.png)
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.5,
+              child: Image.asset('assets/dctLogo.png', fit: BoxFit.contain),
+            ),
+          ),
+          // slight white overlay for readability
+          Positioned.fill(child: Container(color: Colors.white.withOpacity(0.7))),
+          // foreground text
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Text(desc, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+            ],
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ====== Help sheet (like your web modal) ======
+class _HelpSheet extends StatelessWidget {
+  final VoidCallback onClose;
+  final Color brand;
+  const _HelpSheet({required this.onClose, required this.brand});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      child: SafeArea(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Service type guide', style: TextStyle(fontWeight: FontWeight.w700)),
+                IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
+              ]),
+              const SizedBox(height: 8),
+              _section('Facilities and Maintenance', const [
+                'Building concerns: cleanliness, leaks, lights, air-conditioning, plumbing.',
+                'Rooms/fixtures: doors, windows, chairs, whiteboards, signage.',
+                'Provide building and floor/room location and a photo.',
+              ]),
+              _section('IT Support Services - Software', const [
+                'School platforms/portals (LMS, SIS, registrar/grades, library site).',
+                'Account logins, page errors, slow pages, submission failures.',
+                'Provide the platform/system name, a screenshot, and steps to reproduce.',
+              ]),
+              _section('IT Support Services - Hardware', const [
+                'Devices & peripherals: PCs, printers, projectors, keyboards, network ports.',
+                'Cables, connectivity, “no display,” paper jams, power issues.',
+                'Provide building and floor/room location and a photo.',
+              ]),
+            ]),
+          ),
         ),
       ),
+    );
+  }
+
+  static Widget _section(String title, List<String> tips) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        ...tips.map((t) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('•  '), Expanded(child: Text(t, style: const TextStyle(color: Colors.black87))),
+        ])),
+      ]),
     );
   }
 }
@@ -1450,27 +1514,26 @@ class ReportLogsPage extends StatefulWidget {
 }
 
 class _ReportLogsPageState extends State<ReportLogsPage> {
-  String? _expandedId; // only one open at a time
+  // Accent to match your nav
+  static const Color kAccent = Color(0xFFE91E63);
 
-  // ---------- Cloudinary uploader (called on SAVE only when a new photo was picked) ----------
+  String? _expandedId; // composite key "collection:id"
+
+  // ---------- Cloudinary (fill with your creds) ----------
   Future<String?> _uploadToCloudinary(XFile file) async {
     try {
-      // TODO: replace <your_cloud_name> and <your_unsigned_preset> if needed
       final url = Uri.parse("https://api.cloudinary.com/v1_1/<your_cloud_name>/image/upload");
       final request = http.MultipartRequest("POST", url)
         ..fields['upload_preset'] = "<your_unsigned_preset>"
         ..files.add(await http.MultipartFile.fromPath('file', file.path));
-
-      final response = await request.send();
-      final res = await http.Response.fromStream(response);
-
+      final resp = await request.send();
+      final res = await http.Response.fromStream(resp);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         return data["secure_url"] as String?;
-      } else {
-        debugPrint("Cloudinary upload failed: ${res.body}");
-        return null;
       }
+      debugPrint("Cloudinary upload failed: ${res.body}");
+      return null;
     } catch (e) {
       debugPrint("Upload error: $e");
       return null;
@@ -1489,7 +1552,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
   // per-user hidden resolved IDs
   final Set<String> _hiddenResolvedIds = <String>{};
 
-  // image picker
+  // image picker (used in edit sheet)
   final ImagePicker _picker = ImagePicker();
 
   // current user id
@@ -1498,6 +1561,77 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
   // realtime subs
   final List<StreamSubscription> _subs = [];
   bool _bootstrapped = false; // first data arrived?
+
+  // -------------------- PAGINATION --------------------
+  static const int _pageSize = 6;
+  int _page = 1;
+
+  int get _totalPages =>
+      (_filtered.isEmpty) ? 1 : ((_filtered.length + _pageSize - 1) ~/ _pageSize);
+
+  List<_ReportItem> get _pageItems {
+    final start = (_page - 1) * _pageSize;
+    return _filtered.skip(start).take(_pageSize).toList();
+  }
+
+  void _goToPage(int p) {
+    final clamped = p.clamp(1, _totalPages);
+    if (clamped != _page) {
+      setState(() {
+        _page = clamped as int;
+        _expandedId = null; // collapse when page changes
+      });
+    }
+  }
+
+  List<Widget> _buildPageButtons() {
+    final widgets = <Widget>[];
+    final total = _totalPages;
+
+    int start = (_page - 3).clamp(1, total);
+    int end = (start + 6).clamp(1, total);
+    if ((end - start) < 6) start = (end - 6).clamp(1, total);
+
+    Widget pill(int p) {
+      final selected = p == _page;
+      return InkWell(
+        onTap: selected ? null : () => _goToPage(p),
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? kAccent : Colors.transparent,
+            border: Border.all(color: Colors.black87, width: 1),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            '$p',
+            style: TextStyle(
+              color: selected ? Colors.white : Colors.black87,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (start > 1) {
+      widgets.add(pill(1));
+      if (start > 2) widgets.add(const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Text('…')));
+    }
+
+    for (int p = start; p <= end; p++) {
+      widgets.add(pill(p));
+    }
+
+    if (end < total) {
+      if (end < total - 1) widgets.add(const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Text('…')));
+      widgets.add(pill(total));
+    }
+
+    return widgets;
+  }
+  // ----------------------------------------------------
 
   @override
   void initState() {
@@ -1527,6 +1661,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
       _reports.clear();
       _hiddenResolvedIds.clear();
       _bootstrapped = false;
+      _page = 1; // reset on reload
     });
 
     final uid = _uid;
@@ -1555,7 +1690,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
               _hiddenResolvedIds.add(rid);
             }
           }
-          if (mounted) setState(() {});
+          if (mounted) setState(() => _page = 1);
         }, onError: (_) {
           if (mounted) setState(() => _error = 'Live hides failed.');
         }),
@@ -1588,8 +1723,8 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         });
       }
 
-      _subs.add(_listenCollection(collection: 'userReport', fallbackStatus: 'Pending'));
-      _subs.add(_listenCollection(collection: 'onProcess', fallbackStatus: 'On Process'));
+      _subs.add(_listenCollection(collection: 'userReport',      fallbackStatus: 'Pending'));
+      _subs.add(_listenCollection(collection: 'onProcess',       fallbackStatus: 'On Process'));
       _subs.add(_listenCollection(collection: 'resolvedReports', fallbackStatus: 'Resolved'));
     } catch (_) {
       if (mounted) {
@@ -1630,6 +1765,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
 
     // newest first
     _reports.sort((a, b) => b.sortMillis.compareTo(a.sortMillis));
+    _page = 1; // keep bounds sane when list changes
   }
 
   // Visible list = hide resolved items current user has hidden
@@ -1663,14 +1799,19 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
   void _previewImage(String imageUrl) {
     showDialog<void>(
       context: context,
+      useRootNavigator: true,
       barrierColor: Colors.black87,
       builder: (_) => GestureDetector(
-        onTap: () => Navigator.pop(context),
+        onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         child: Stack(
           children: [
             Center(
               child: InteractiveViewer(
-                child: Image.network(imageUrl, fit: BoxFit.contain),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true, // helps with SurfaceView buffer churn
+                ),
               ),
             ),
             Positioned(
@@ -1679,7 +1820,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
               child: IconButton(
                 style: IconButton.styleFrom(backgroundColor: Colors.black54),
                 icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
               ),
             ),
           ],
@@ -1688,216 +1829,75 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
     );
   }
 
-  // --- Dialog helpers (place inside your State class) ---
-  Future<void> _showInfo(BuildContext context, String title, String message) async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (c) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('OK')),
-        ],
-      ),
-    );
-  }
-
-  Future<bool> _showConfirm(
-      BuildContext context, {
-        required String title,
-        required String message,
-        String confirmText = 'OK',
-        String cancelText = 'Cancel',
-      }) async {
+  // --- Simple confirm (kept as dialog; AppMsg handles success/error/info) ---
+  Future<bool> _showConfirm({
+    required String title,
+    required String message,
+    String confirmText = 'OK',
+    String cancelText = 'Cancel',
+  }) async {
     final result = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: false,
       builder: (c) => AlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.of(c).pop(false), child: Text(cancelText)),
-          ElevatedButton(onPressed: () => Navigator.of(c).pop(true), child: Text(confirmText)),
+          TextButton(
+            onPressed: () => Navigator.of(c, rootNavigator: true).pop(false),
+            child: Text(cancelText),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(c, rootNavigator: true).pop(true),
+            child: Text(confirmText),
+          ),
         ],
       ),
     );
     return result ?? false;
   }
 
-  Future<String?> _promptText(
-      BuildContext context, {
-        required String title,
-        String inputLabel = 'Notes',
-        String hint = '',
-        String confirmText = 'OK',
-        String cancelText = 'Cancel',
-        int maxLines = 3,
-      }) async {
-    final ctl = TextEditingController();
-    return showDialog<String?>(
-      context: context,
-      barrierDismissible: false,
-      builder: (c) => AlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(inputLabel, style: Theme.of(c).textTheme.labelMedium),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: ctl,
-              maxLines: maxLines,
-              decoration: InputDecoration(
-                hintText: hint,
-                border: const OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(c).pop(null), child: Text(cancelText)),
-          ElevatedButton(onPressed: () => Navigator.of(c).pop(ctl.text.trim()), child: Text(confirmText)),
-        ],
-      ),
-    );
-  }
-
-  void _toast(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-// --- Your fixed methods ---
+  // --- Remove from my log (Resolved only) ---
   Future<void> _removeFromMyLog(_ReportItem r) async {
-    if (_uid == null) return;
-
-    // 1) Confirm first
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (c) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Remove from your log?'),
-        content: const Text(
-          'This will remove this report from your Reported Issues on your device. '
-              'You can still find it in Records if needed.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(c).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () => Navigator.of(c).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+    if (_uid == null) {
+      await AppMsg.notSignedIn(context);
+      return;
+    }
+    final ok = await _showConfirm(
+      title: 'Remove from your log?',
+      message: 'This will hide this resolved report from your Reported Issues.',
+      confirmText: 'Remove',
     );
-
-    if (ok != true) return;
+    if (!ok) return;
 
     try {
-      // 2) Persist the hide
-      await FirebaseFirestore.instance
-          .collection('userResolvedHides')
-          .doc('$_uid-${r.id}')
-          .set({
+      final hideId = '${_uid}-${r.id}';
+      await FirebaseFirestore.instance.collection('userResolvedHides').doc(hideId).set({
         'uid': _uid,
         'reportId': r.id,
-        'at': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
       });
-
-      // 3) Immediate local hide
-      if (mounted) {
-        setState(() {
-          _hiddenResolvedIds.add(r.id);
-        });
-      }
-
-      if (!mounted) return;
-
-      // 4) Success modal (auto-close after 2s)
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.check_circle, color: Colors.green, size: 48),
-              SizedBox(height: 12),
-              Text(
-                'Removed',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'The report is no longer in your Reported Issues.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) Navigator.of(context).pop(); // close success dialog
+      setState(() {
+        _hiddenResolvedIds.add(r.id);
+      });
+      await AppMsg.success(context, 'Removed', m: 'The report is removed from your log.');
     } catch (e) {
-      if (!mounted) return;
-
-      // Error modal (auto-close after 2s)
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.error, color: Colors.red, size: 48),
-              SizedBox(height: 12),
-              Text(
-                'Failed',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Could not remove the report. Please try again.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) Navigator.of(context).pop(); // close error dialog
+      await AppMsg.error(context, 'Error', m: 'Failed to remove the report.');
     }
   }
 
-
+  // --- Approve resolution (reporter only) ---
   Future<void> _approveResolution(_ReportItem r) async {
     if (_uid != r.uid) {
-      await _showInfo(context, 'Not allowed', 'Only the original reporter can approve.');
+      await AppMsg.error(context, 'Not allowed', m: 'Only the original reporter can approve.');
       return;
     }
     if ((r.userApprovalStatus ?? 'pending').toLowerCase() == 'approved') {
-      await _showInfo(context, 'Already approved', 'This resolution is already approved.');
+      await AppMsg.success(context, 'Already approved', m: 'This resolution is already approved.');
       return;
     }
-
     final ok = await _showConfirm(
-      context,
       title: 'Confirm Approval',
       message: 'Confirm that the issue is resolved.',
       confirmText: 'Approve',
@@ -1911,56 +1911,30 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         'userApprovalByUid': _uid,
         'userApprovalNotes': null,
       }, SetOptions(merge: true));
-
-      if (!mounted) return;
-
-      // Success modal (auto-closes after 2s)
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.check_circle, color: Colors.green, size: 48),
-              SizedBox(height: 12),
-              Text('Approved', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text('Thanks for confirming the fix.', textAlign: TextAlign.center),
-            ],
-          ),
-        ),
-      );
-
-      await Future.delayed(const Duration(seconds: 2));
-      if (!mounted) return;
-      Navigator.of(context).pop(); // close success dialog
+      await AppMsg.success(context, 'Approved', m: 'Thanks for confirming the fix.');
     } catch (e) {
-      if (!mounted) return;
       await AppMsg.error(context, 'Error', m: 'Could not approve the resolution.');
     }
   }
 
+  // --- Decline resolution (reporter only) ---
   Future<void> _declineResolution(_ReportItem r) async {
     if (_uid != r.uid) {
-      await _showInfo(context, 'Not allowed', 'Only the original reporter can decline.');
+      await AppMsg.error(context, 'Not allowed', m: 'Only the original reporter can decline.');
       return;
     }
     if ((r.userApprovalStatus ?? 'pending').toLowerCase() == 'declined') {
-      await _showInfo(context, 'Already declined', 'This resolution is already declined.');
+      await AppMsg.success(context, 'Already declined', m: 'This resolution is already declined.');
       return;
     }
 
     final notes = await _promptText(
-      context,
       title: 'Decline Resolution',
       inputLabel: 'Tell us what is still wrong',
       hint: 'Optional notes...',
       confirmText: 'Decline',
-      maxLines: 3,
     );
-    if (notes == null) return; // cancelled
+    if (notes == null) return;
 
     try {
       await FirebaseFirestore.instance.collection('resolvedReports').doc(r.id).set({
@@ -1969,41 +1943,53 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         'userApprovalByUid': _uid,
         'userApprovalNotes': notes.isEmpty ? null : notes,
       }, SetOptions(merge: true));
-
-      if (!mounted) return;
-
-      // Success modal (auto-closes after 2s)
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.check_circle, color: Colors.green, size: 48),
-              SizedBox(height: 12),
-              Text('Declined', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text('We noted your feedback. A staff member will review.', textAlign: TextAlign.center),
-            ],
-          ),
-        ),
-      );
-
-      await Future.delayed(const Duration(seconds: 2));
-      if (!mounted) return;
-      Navigator.of(context).pop(); // close success dialog
+      await AppMsg.success(context, 'Noted', m: 'Marked as not resolved. A staff member will review.');
     } catch (e) {
-      if (!mounted) return;
       await AppMsg.error(context, 'Error', m: 'Could not decline the resolution.');
     }
   }
 
+  // --- Prompt text helper (kept minimal) ---
+  Future<String?> _promptText({
+    required String title,
+    String inputLabel = 'Notes',
+    String hint = '',
+    String confirmText = 'OK',
+    String cancelText = 'Cancel',
+    int maxLines = 3,
+  }) async {
+    final ctl = TextEditingController();
+    final value = await showDialog<String?>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (c) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Align(alignment: Alignment.centerLeft, child: Text(inputLabel, style: Theme.of(c).textTheme.labelMedium)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: ctl,
+              maxLines: maxLines,
+              decoration: InputDecoration(
+                hintText: hint,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(c, rootNavigator: true).pop(null), child: Text(cancelText)),
+          ElevatedButton(onPressed: () => Navigator.of(c, rootNavigator: true).pop(ctl.text.trim()), child: Text(confirmText)),
+        ],
+      ),
+    );
+    return value;
+  }
 
-
-  // ---------- EDIT SHEET (mirrors your web UX) ----------
-  // ---------- EDIT SHEET (mirrors your web UX) ----------
+  // --- FULL EDIT SHEET (restored) ---
   void _openEditSheet(_ReportItem r) {
     // controllers
     final bCtrl = TextEditingController(text: r.buildingName ?? '');
@@ -2011,44 +1997,30 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
     final pCtrl = TextEditingController(text: r.platformName ?? r.platform ?? r.systemName ?? '');
     final dCtrl = TextEditingController(text: r.additionalDetails ?? '');
 
-    // service types (same as web)
-    // service types (same as web)
     const svcTypes = <String>[
       'Facilities and Maintenance',
       'IT Support Services - Hardware',
       'IT Support Services - Software',
     ];
 
-// Canonicalize: lower-case, normalize dashes/whitespace
-    String _canon(String s) {
-      return s
-          .replaceAll(RegExp(r'[\u2012-\u2015\u2212]'), '-') // any unicode dash -> '-'
-          .replaceAll(RegExp(r'\s+'), ' ')                   // collapse spaces
-          .trim()
-          .toLowerCase();
-    }
+    String _canon(String s) => s
+        .replaceAll(RegExp(r'[\u2012-\u2015\u2212]'), '-')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .toLowerCase();
 
-// Snap an arbitrary incoming string to a known option (or '' if no match)
     String _snapToOption(String? raw) {
       final c = _canon(raw ?? '');
       for (final opt in svcTypes) {
-        if (_canon(opt) == c) return opt; // return the exact label from svcTypes
+        if (_canon(opt) == c) return opt;
       }
-      return ''; // none matched
+      return '';
     }
 
-// Use snapped option as the initial group value
     String svcType = _snapToOption(r.serviceType);
-
-
-
-
-
-    String? currentImageUrl = r.imageUrl; // existing image in DB
-    XFile? newImageFile; // newly chosen; upload on SAVE
+    String? currentImageUrl = r.imageUrl;
+    XFile? newImageFile;
     bool saving = false;
-
-    // NEW: track if anything changed
     bool dirty = false;
 
     Future<void> _pickFromGallery(StateSetter setSheet) async {
@@ -2087,6 +2059,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
 
     Future<void> _save(StateSetter setSheet) async {
       if (saving) return;
+
       final err = _validate();
       if (err != null) {
         await AppMsg.incompleteForm(context, custom: err);
@@ -2095,12 +2068,11 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
 
       setSheet(() => saving = true);
       try {
-        // Upload ONLY if a new file was chosen; otherwise keep currentImageUrl
         String finalImageUrl = currentImageUrl ?? '';
         if (newImageFile != null) {
           final uploaded = await _uploadToCloudinary(newImageFile!);
           if (uploaded == null || uploaded.isEmpty) {
-            await AppMsg.error(context, 'Upload failed', m: 'Could not upload the image. Try again.');
+            await AppMsg.uploadFailed(context);
             setSheet(() => saving = false);
             return;
           }
@@ -2108,62 +2080,30 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
         }
 
         final isSW = svcType == 'IT Support Services - Software';
-
         final payload = <String, dynamic>{
           'uid': _uid,
           'serviceType': svcType,
           'additionalDetails': dCtrl.text.trim(),
           'imageUrl': finalImageUrl,
           'lastEditedAt': FieldValue.serverTimestamp(),
-          // normalize fields like web
           'platformName': isSW ? pCtrl.text.trim() : null,
           'buildingName': isSW ? null : bCtrl.text.trim(),
           'floorLocation': isSW ? null : fCtrl.text.trim(),
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
-        // Only editable if still in userReport (same rule as web)
+        // Editable only in userReport
         await FirebaseFirestore.instance.collection('userReport').doc(r.id).set(
           payload,
           SetOptions(merge: true),
         );
 
-        if (!mounted) return;
+        await AppMsg.success(context, 'Updated', m: 'Your report has been updated.');
 
-        // Auto-closing success dialog (2s)
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (c) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.check_circle, color: Colors.green, size: 48),
-                SizedBox(height: 12),
-                Text(
-                  'Updated',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Your report has been updated.',
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        );
-
-        // Wait 2 seconds → close dialog → close sheet
-        await Future.delayed(const Duration(seconds: 2));
         if (!mounted) return;
-        Navigator.of(context).pop(); // close success dialog
-        Navigator.pop(context);      // close bottom sheet
+        Navigator.of(context, rootNavigator: true).pop(); // close sheet
       } catch (e) {
-        if (!mounted) return;
-        await AppMsg.error(context, 'Update failed', m: e.toString());
+        await AppMsg.error(context, 'Update failed', m: 'Please try again.');
       } finally {
         if (mounted) setSheet(() => saving = false);
       }
@@ -2171,6 +2111,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
 
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
@@ -2188,22 +2129,8 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
               fit: BoxFit.cover,
             )
                 : (currentImageUrl?.isNotEmpty == true
-                ? Image.network(currentImageUrl!, width: 100, height: 70, fit: BoxFit.cover)
-                : Container(
-              width: 100,
-              height: 70,
-              color: const Color(0xFF0A1936),
-            ));
-
-            // Hook up change listeners once (to set dirty when user types)
-            void _attachDirtyListeners() {
-              bCtrl.removeListener(() {});
-              fCtrl.removeListener(() {});
-              pCtrl.removeListener(() {});
-              dCtrl.removeListener(() {});
-            }
-
-            // Instead of listeners, use onChanged on TextFields below (simpler/clearer)
+                ? Image.network(currentImageUrl!, width: 100, height: 70, fit: BoxFit.cover, gaplessPlayback: true)
+                : Container(width: 100, height: 70, color: const Color(0xFF0A1936)));
 
             return Padding(
               padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 16 + bottomInset),
@@ -2215,27 +2142,29 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                     Row(
                       children: [
                         const Expanded(
-                          child: Text('Edit Report',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          child: Text('Edit Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
                         IconButton(
-                          onPressed: saving ? null : () => Navigator.pop(context),
+                          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
                           icon: const Icon(Icons.close),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
 
-                    // Service type (radio like web, 3 options)
+                    // Service type
                     const Text('Service Type', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: svcTypes.map((t) {
-                        final selected = svcType == t; // exact, because we snapped svcType
+                        final selected = svcType == t;
                         return InkWell(
-                          onTap: saving ? null : () => setSheet(() => svcType = t),
+                          onTap: () => setSheet(() {
+                            svcType = t;
+                            dirty = true;
+                          }),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
@@ -2245,8 +2174,11 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                             child: Row(mainAxisSize: MainAxisSize.min, children: [
                               Radio<String>(
                                 value: t,
-                                groupValue: svcType, // exact match now
-                                onChanged: saving ? null : (v) => setSheet(() => svcType = v ?? ''),
+                                groupValue: svcType,
+                                onChanged: (v) => setSheet(() {
+                                  svcType = v ?? '';
+                                  dirty = true;
+                                }),
                                 activeColor: Colors.black,
                               ),
                               Text(t, style: const TextStyle(fontSize: 12)),
@@ -2256,13 +2188,11 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                       }).toList(),
                     ),
 
-
                     const SizedBox(height: 12),
 
-                    // Conditional fields (like web)
+                    // Conditional fields
                     if (svcType == 'IT Support Services - Software') ...[
-                      const Text('Platform / System Name',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const Text('Platform / System Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       TextField(
                         controller: pCtrl,
@@ -2270,8 +2200,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                         decoration: _inputDecoration('e.g., LMS, Library System'),
                       ),
                     ] else ...[
-                      const Text('Building Name',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const Text('Building Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       TextField(
                         controller: bCtrl,
@@ -2279,8 +2208,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                         decoration: _inputDecoration('Enter building name'),
                       ),
                       const SizedBox(height: 10),
-                      const Text('Floor / Room Location',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const Text('Floor / Room Location', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       TextField(
                         controller: fCtrl,
@@ -2291,7 +2219,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
 
                     const SizedBox(height: 12),
 
-                    // Image picker (Upload Photo / Take Photo) + preview like web
+                    // Image picker
                     const Text('Image', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
                     Row(
@@ -2309,7 +2237,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             ElevatedButton(
-                              onPressed: saving ? null : () => _pickFromGallery(setSheet),
+                              onPressed: () => _pickFromGallery(setSheet),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.black87,
@@ -2320,7 +2248,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                             ),
                             const SizedBox(height: 8),
                             ElevatedButton(
-                              onPressed: saving ? null : () => _pickFromCamera(setSheet),
+                              onPressed: () => _pickFromCamera(setSheet),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.black87,
@@ -2332,11 +2260,9 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                             if (newImageFile != null) ...[
                               const SizedBox(height: 8),
                               TextButton(
-                                onPressed: saving
-                                    ? null
-                                    : () => setSheet(() {
+                                onPressed: () => setSheet(() {
                                   newImageFile = null;
-                                  dirty = true; // mark change
+                                  dirty = true;
                                 }),
                                 child: const Text('Remove new image'),
                               )
@@ -2360,12 +2286,12 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
 
                     const SizedBox(height: 16),
 
-                    // Actions (align right like web)
+                    // Actions
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         OutlinedButton(
-                          onPressed: saving ? null : () => Navigator.pop(context),
+                          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
                           child: const Text('Cancel'),
                         ),
                         const SizedBox(width: 8),
@@ -2389,9 +2315,6 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
     );
   }
 
-
-
-
   // ---------- BUILD ----------
   @override
   Widget build(BuildContext context) {
@@ -2399,25 +2322,18 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
     final size = MediaQuery.of(context).size;
     final edge = (size.width * 0.05).clamp(16.0, 24.0);
 
+    // keep page within bounds if list shrinks or filter changes
+    if (_page > _totalPages) _page = _totalPages;
+    if (_page < 1) _page = 1;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text(
-          'REPORTED ISSUES',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
+        title: const Text('REPORTED ISSUES', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
-        // actions: [   <--- remove this block
-        //   IconButton(
-        //     tooltip: 'Reconnect live',
-        //     onPressed: _startRealtime,
-        //     icon: const Icon(Icons.wifi, color: Colors.black),
-        //   ),
-        // ],
       ),
-
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -2435,17 +2351,11 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          'Filter by status:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
+                        const Text('Filter by status:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                            decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: DropdownButton<String>(
                               isExpanded: true,
@@ -2454,7 +2364,11 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                               items: const ['All', 'Pending', 'On Process', 'Resolved']
                                   .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                                   .toList(),
-                              onChanged: (v) => setState(() => _statusFilter = v ?? 'All'),
+                              onChanged: (v) => setState(() {
+                                _statusFilter = v ?? 'All';
+                                _page = 1;
+                                _expandedId = null;
+                              }),
                             ),
                           ),
                         ),
@@ -2476,7 +2390,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
               ),
               const Divider(thickness: 2),
 
-              // List
+              // List (paged)
               Expanded(
                 child: _filtered.isEmpty
                     ? Center(
@@ -2485,46 +2399,63 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
                     children: [
                       Icon(Icons.assignment_outlined, size: 60, color: Colors.grey[400]),
                       const SizedBox(height: 16),
-                      Text('No reports found for this status.',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                      Text('No reports found for this status.', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
                       const SizedBox(height: 8),
-                      Text('Reports will appear here when submitted',
-                          style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                      Text('Reports will appear here when submitted', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
                     ],
                   ),
                 )
                     : ListView.builder(
                   padding: EdgeInsets.all(edge),
-                  itemCount: _filtered.length,
+                  itemCount: _pageItems.length,
                   itemBuilder: (_, i) {
-                    final r = _filtered[i];
-                    final canEdit =
-                        r.status.toLowerCase() == 'pending' && r.collection == 'userReport';
-                    return _ReportTile(
-                      item: r,
-                      currentUid: _uid,
-                      open: _expandedId == r.id,                             // NEW
-                      onToggle: () => setState(() {                         // NEW
-                        _expandedId = (_expandedId == r.id) ? null : r.id;  // toggle; ensure only one open
-                      }),
-
-                      onPreview: r.imageUrl != null ? () => _previewImage(r.imageUrl!) : null,
-                      onPreviewResolved: (r.resolvedImageUrl != null && r.resolvedImageUrl!.isNotEmpty)
-                          ? () => _previewImage(r.resolvedImageUrl!)
-                          : null,
-                      onRemoveFromMyLog: r.status.toLowerCase() == 'resolved'
-                          ? () => _removeFromMyLog(r)
-                          : null,
-                      onEdit: (r.status.toLowerCase() == 'pending' && r.collection == 'userReport')
-                          ? () => _openEditSheet(r)
-                          : null,
-                      onApprove: r.status.toLowerCase() == 'resolved' ? () => _approveResolution(r) : null,
-                      onDecline: r.status.toLowerCase() == 'resolved' ? () => _declineResolution(r) : null,
+                    final r = _pageItems[i];
+                    final rowKey = '${r.collection}:${r.id}';
+                    final canEdit = r.status.toLowerCase() == 'pending' && r.collection == 'userReport';
+                    return KeyedSubtree(
+                      key: ValueKey(rowKey), // stable
+                      child: _ReportTile(
+                        item: r,
+                        currentUid: _uid,
+                        open: _expandedId == rowKey,
+                        onToggle: () => setState(() {
+                          _expandedId = (_expandedId == rowKey) ? null : rowKey;
+                        }),
+                        onPreview: r.imageUrl != null ? () => _previewImage(r.imageUrl!) : null,
+                        onPreviewResolved: (r.resolvedImageUrl != null && r.resolvedImageUrl!.isNotEmpty)
+                            ? () => _previewImage(r.resolvedImageUrl!)
+                            : null,
+                        onRemoveFromMyLog: r.status.toLowerCase() == 'resolved' ? () => _removeFromMyLog(r) : null,
+                        onEdit: canEdit ? () => _openEditSheet(r) : null,
+                        onApprove: r.status.toLowerCase() == 'resolved' ? () => _approveResolution(r) : null,
+                        onDecline: r.status.toLowerCase() == 'resolved' ? () => _declineResolution(r) : null,
+                      ),
                     );
-
                   },
                 ),
               ),
+
+              // Pagination bar
+              if (_filtered.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(bottom: edge, left: edge, right: edge, top: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: _page > 1 ? () => _goToPage(_page - 1) : null,
+                        child: const Text('Previous'),
+                      ),
+                      const SizedBox(width: 8),
+                      Wrap(spacing: 6, children: _buildPageButtons()),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: _page < _totalPages ? () => _goToPage(_page + 1) : null,
+                        child: const Text('Next'),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
@@ -2555,7 +2486,7 @@ class _ReportLogsPageState extends State<ReportLogsPage> {
   );
 }
 
-// ---------- Models & tiles ----------
+// ---------- Models & tiles (unchanged from your version) ----------
 
 class _ReportItem {
   final String id;
@@ -2672,22 +2603,22 @@ class _ReportTile extends StatefulWidget {
   final _ReportItem item;
   final String? currentUid;
 
-  // NEW: controlled expansion
+  // controlled expansion
   final bool open;
   final VoidCallback onToggle;
 
-  final VoidCallback? onPreview;           // original image
-  final VoidCallback? onPreviewResolved;   // resolution image
-  final VoidCallback? onRemoveFromMyLog;   // only for Resolved
-  final VoidCallback? onDelete;            // optional (not used)
-  final VoidCallback? onEdit;              // edit pending item
-  final VoidCallback? onApprove;           // user approves resolution
-  final VoidCallback? onDecline;           // user declines resolution
+  final VoidCallback? onPreview; // original image
+  final VoidCallback? onPreviewResolved; // resolution image
+  final VoidCallback? onRemoveFromMyLog; // only for Resolved
+  final VoidCallback? onDelete; // optional (not used)
+  final VoidCallback? onEdit; // edit pending item
+  final VoidCallback? onApprove; // user approves resolution
+  final VoidCallback? onDecline; // user declines resolution
 
   const _ReportTile({
     required this.item,
-    required this.open,         // NEW (required)
-    required this.onToggle,     // NEW (required)
+    required this.open,
+    required this.onToggle,
     this.currentUid,
     this.onPreview,
     this.onPreviewResolved,
@@ -2711,8 +2642,18 @@ class _ReportTileState extends State<_ReportTile> {
   }
 
   static String _mfull(int m) => const [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December'
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
   ][m - 1];
   static String _two(int n) => n.toString().padLeft(2, '0');
 
@@ -2727,12 +2668,6 @@ class _ReportTileState extends State<_ReportTile> {
     final thumbW = (size.width * 0.28).clamp(90.0, 120.0);
     final thumbH = (thumbW * 0.7).clamp(64.0, 90.0);
 
-    final platformLine = r.platformName?.isNotEmpty == true
-        ? r.platformName
-        : (r.systemName?.isNotEmpty == true
-        ? r.systemName
-        : (r.platform?.isNotEmpty == true ? r.platform : null));
-
     final approval = (r.userApprovalStatus ?? 'pending').toLowerCase();
     final isOwner = (widget.currentUid != null && widget.currentUid == r.uid);
 
@@ -2746,6 +2681,7 @@ class _ReportTileState extends State<_ReportTile> {
           width: thumbW,
           height: thumbH,
           fit: BoxFit.cover,
+          gaplessPlayback: true,
         ),
       ),
     )
@@ -2758,8 +2694,7 @@ class _ReportTileState extends State<_ReportTile> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
-      child: const Text('No image',
-          style: TextStyle(fontSize: 10, color: Colors.black54)),
+      child: const Text('No image', style: TextStyle(fontSize: 10, color: Colors.black54)),
     );
 
     return Container(
@@ -2780,7 +2715,7 @@ class _ReportTileState extends State<_ReportTile> {
         children: [
           // Header toggles via parent
           InkWell(
-            onTap: widget.onToggle, // NEW
+            onTap: widget.onToggle,
             child: Container(
               height: headerH,
               decoration: const BoxDecoration(
@@ -2806,8 +2741,7 @@ class _ReportTileState extends State<_ReportTile> {
                       AnimatedRotation(
                         duration: const Duration(milliseconds: 200),
                         turns: widget.open ? 0.5 : 0.0,
-                        child: const Icon(Icons.keyboard_arrow_down,
-                            color: Colors.black, size: 18),
+                        child: const Icon(Icons.keyboard_arrow_down, color: Colors.black, size: 18),
                       ),
                     ],
                   )
@@ -2820,9 +2754,7 @@ class _ReportTileState extends State<_ReportTile> {
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
             secondChild: _details(context, r, isResolved, canEdit, isOwner, approval, size, preview, thumbW, thumbH),
-            crossFadeState: widget.open
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
+            crossFadeState: widget.open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 220),
           ),
         ],
@@ -2893,9 +2825,7 @@ class _ReportTileState extends State<_ReportTile> {
           Text.rich(
             TextSpan(
               children: [
-                const TextSpan(
-                    text: 'Other Details: ',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const TextSpan(text: 'Other Details: ', style: TextStyle(fontWeight: FontWeight.w600)),
                 TextSpan(text: r.additionalDetails ?? '—'),
               ],
             ),
@@ -2920,12 +2850,10 @@ class _ReportTileState extends State<_ReportTile> {
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                       ),
                       const Text('•', style: TextStyle(color: Colors.grey)),
-                      Text(
-                          r.resolvedByDept?.isNotEmpty == true ? r.resolvedByDept! : '—',
+                      Text(r.resolvedByDept?.isNotEmpty == true ? r.resolvedByDept! : '—',
                           style: const TextStyle(fontSize: 12, color: Colors.black87)),
                       const Text('•', style: TextStyle(color: Colors.grey)),
-                      Text(_fmtDate(r.resolvedAt),
-                          style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                      Text(_fmtDate(r.resolvedAt), style: const TextStyle(fontSize: 12, color: Colors.black87)),
                     ],
                   ),
                 ),
@@ -2947,6 +2875,7 @@ class _ReportTileState extends State<_ReportTile> {
                         width: thumbW,
                         height: thumbH,
                         fit: BoxFit.cover,
+                        gaplessPlayback: true,
                       ),
                     ),
                   )
@@ -2959,8 +2888,7 @@ class _ReportTileState extends State<_ReportTile> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFE5E7EB)),
                     ),
-                    child: const Text('No image',
-                        style: TextStyle(fontSize: 10, color: Colors.black54)),
+                    child: const Text('No image', style: TextStyle(fontSize: 10, color: Colors.black54)),
                   ),
                 ),
               ],
@@ -2970,9 +2898,7 @@ class _ReportTileState extends State<_ReportTile> {
             Text.rich(
               TextSpan(
                 children: [
-                  const TextSpan(
-                      text: 'Resolution Summary: ',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const TextSpan(text: 'Resolution Summary: ', style: TextStyle(fontWeight: FontWeight.w600)),
                   TextSpan(text: r.resolutionNotes ?? '—'),
                 ],
               ),
@@ -2988,9 +2914,7 @@ class _ReportTileState extends State<_ReportTile> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   child: const Text('Approve — Issue Resolved'),
                 ),
@@ -3003,9 +2927,7 @@ class _ReportTileState extends State<_ReportTile> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   child: const Text('Decline — Not Resolved'),
                 ),
@@ -3022,12 +2944,8 @@ class _ReportTileState extends State<_ReportTile> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: EdgeInsets.symmetric(
-                    vertical: (size.height * 0.015).clamp(10.0, 14.0),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: EdgeInsets.symmetric(vertical: (size.height * 0.015).clamp(10.0, 14.0)),
                 ),
                 child: const Text('Remove from My Log'),
               ),
@@ -3043,9 +2961,7 @@ class _ReportTileState extends State<_ReportTile> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black87,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 child: const Text('Edit Report'),
               ),
@@ -3081,10 +2997,6 @@ class _ReportTileState extends State<_ReportTile> {
     );
   }
 }
-
-
-
-
 
 class _StatusChip extends StatelessWidget {
   final String status;
@@ -3126,6 +3038,11 @@ class _StatusChip extends StatelessWidget {
     );
   }
 }
+
+
+
+// ---------- Models & tiles ----------
+
 
 class _LabeledField extends StatelessWidget {
   final String label;

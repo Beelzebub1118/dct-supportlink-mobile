@@ -1,47 +1,33 @@
 // functions/index.js
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-
 admin.initializeApp();
+
 const db = admin.firestore();
 const messaging = admin.messaging();
 
-// Per-function runtime options (v1 API)
 const runtimeOpts = {
   maxInstances: 10,
   memory: "256MB",
   timeoutSeconds: 60,
 };
 
-/**
- * Send a push to all tokens under users/{uid}/fcmTokens/*
- * We store tokens as doc IDs, with optional { token, platform, updatedAt } fields.
- */
-async function notifyUser(uid, { title, body, data = {} }) {
+// helper: send to all tokens under users/{uid}/fcmTokens/* (token as docId or field)
+async function notifyUser(uid, payload) {
   const snap = await db.collection("users").doc(uid).collection("fcmTokens").get();
   if (snap.empty) return;
 
-  const tokens = snap.docs.map((d) => d.id);
+  const tokens = snap.docs
+    .map((d) => d.id || d.get("token"))
+    .filter(Boolean);
 
-  const message = {
-    notification: { title, body },
-    data,
-    android: {
-      notification: {
-        channelId: "high_importance_channel", // must match your AndroidManifest meta-data
-        priority: "HIGH",
-      },
-    },
-    apns: {
-      payload: { aps: { sound: "default", contentAvailable: true } },
-    },
+  const resp = await messaging.sendEachForMulticast({
+    ...payload,
     tokens,
-  };
+  });
 
-  const resp = await messaging.sendEachForMulticast(message);
-
-  // Remove tokens that are no longer valid
-  const invalid = [];
+  // prune invalid tokens
+  const toDelete = [];
   resp.responses.forEach((r, i) => {
     if (!r.success) {
       const code = r.error?.code || "";
@@ -49,89 +35,77 @@ async function notifyUser(uid, { title, body, data = {} }) {
         code.includes("registration-token-not-registered") ||
         code.includes("invalid-argument")
       ) {
-        invalid.push(tokens[i]);
+        const token = tokens[i];
+        toDelete.push(
+          db.collection("users").doc(uid).collection("fcmTokens").doc(token).delete().catch(() => null)
+        );
       }
     }
   });
-  await Promise.all(
-    invalid.map((t) =>
-      db.collection("users").doc(uid).collection("fcmTokens").doc(t).delete()
-    )
-  );
+  await Promise.all(toDelete);
 }
 
-/**
- * Fires when an admin (or backend) creates a doc in onProcess/{reportId}
- * → Notifies the original reporter (doc.uid)
- */
-exports.onReportMovedToProcess = functions
+// 🔔 Fires when status changes in userReport/{reportId}
+exports.onReportStatusChange = functions
   .runWith(runtimeOpts)
-  .firestore.document("onProcess/{reportId}")
-  .onCreate(async (snap, ctx) => {
-    const d = snap.data() || {};
+  .firestore.document("userReport/{reportId}")
+  .onUpdate(async (change, ctx) => {
+    const before = (change.before.get("status") || "").toString().toLowerCase().trim();
+    const after  = (change.after.get("status")  || "").toString().toLowerCase().trim();
+    if (!after || before === after) return null; // no change
+
+    const d   = change.after.data() || {};
     const uid = d.uid;
-    if (!uid) return;
+    if (!uid) return null;
+
+    // Normalize status for ID (remove spaces): "on process" → "onprocess"
+    const statusKey = after.replace(/\s+/g, "");
+    const reportId  = ctx.params.reportId;
+    const notifId   = `report:${reportId}:${statusKey}`;
+
+    const title =
+      statusKey === "onprocess"
+        ? "Your report is being processed"
+        : statusKey === "resolved"
+        ? "Report resolved"
+        : "Report updated";
+
+    const body =
+      statusKey === "onprocess"
+        ? `Report "${d.serviceType || d.platformName || reportId}" is now in progress.`
+        : statusKey === "resolved"
+        ? "A fix was submitted for your report. Please review & approve."
+        : `Report ${reportId} is now ${after}.`;
+
+    const data = {
+      notifId,
+      reportId,
+      status: statusKey,
+      route: `/reports/${reportId}`,
+    };
 
     await notifyUser(uid, {
-      title: "Your report is being processed",
-      body: `Report "${d.serviceType || d.platformName || "Update"}" is now in progress.`,
-      data: {
-        reportId: ctx.params.reportId,
-        status: "onProcess",
+      notification: { title, body },
+      data,
+      android: {
+        // Collapses duplicates in transit & helps local grouping
+        collapseKey: notifId,
+        priority: "high",
+        notification: {
+          channelId: "high_importance_channel", // must match your AndroidManifest
+          tag: notifId,
+        },
+      },
+      apns: {
+        headers: {
+          "apns-collapse-id": notifId,
+          "apns-priority": "10",
+        },
+        payload: {
+          aps: { sound: "default" },
+        },
       },
     });
+
+    return null;
   });
-
-/**
- * Fires when a doc appears in resolvedReports/{reportId}
- * → Notifies the original reporter (doc.uid)
- */
-exports.onReportResolved = functions
-  .runWith(runtimeOpts)
-  .firestore.document("resolvedReports/{reportId}")
-  .onCreate(async (snap, ctx) => {
-    const d = snap.data() || {};
-    const uid = d.uid;
-    if (!uid) return;
-
-    await notifyUser(uid, {
-      title: "Report resolved",
-      body: "A fix was submitted for your report. Please review & approve.",
-      data: {
-        reportId: ctx.params.reportId,
-        status: "resolved",
-      },
-    });
-  });
-
-/**
- * OPTIONAL: If you ever switch to a single collection and change a `status` field,
- * you can use this instead. Keep it commented out if you use separate collections.
- */
-// exports.onStatusChange = functions
-//   .runWith(runtimeOpts)
-//   .firestore.document("userReport/{reportId}")
-//   .onUpdate(async (change, ctx) => {
-//     const before = (change.before.data().status || "").toLowerCase();
-//     const after = (change.after.data().status || "").toLowerCase();
-//     if (before === after) return;
-//     const d = change.after.data() || {};
-//     const uid = d.uid;
-//     if (!uid) return;
-//
-//     let title = "Report updated";
-//     let body = `Status: ${after}`;
-//     if (after === "on process") {
-//       title = "Your report is being processed";
-//       body = `Report "${d.serviceType || d.platformName || "Update"}" is now in progress.`;
-//     } else if (after === "resolved") {
-//       title = "Report resolved";
-//       body = "A fix was submitted for your report. Please review & approve.";
-//     }
-//
-//     await notifyUser(uid, {
-//       title,
-//       body,
-//       data: { reportId: ctx.params.reportId, status: after },
-//     });
-//   });

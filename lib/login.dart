@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ui_messages.dart';
-import 'notification_service.dart'; // ⬅️ import added
+import 'notification_service.dart'; // ⬅️ keep this
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,6 +21,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _obscure = true;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize FCM foreground handlers + token refresh ONCE.
+    NotificationService.initForegroundHandlers(context);
+    NotificationService.listenTokenRefresh(context);
+  }
 
   @override
   void dispose() {
@@ -67,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         return;
       }
-
+      await NotificationService.startStatusWatch();
       // 3) User document
       final userSnap =
       await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -103,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await prefs.setString('uid', uid);
       await prefs.setString('role', role);
 
-      // 4.1) ⬅️ Save this device's FCM token immediately
+      // 4.1) Save this device's FCM token immediately
       await NotificationService.saveTokenToFirestore(context);
 
       // 5) Success modal → navigate
@@ -118,6 +126,84 @@ class _LoginScreenState extends State<LoginScreen> {
         'Login error',
         m: e.toString(),
       );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Returns true if an account exists for [email].
+  /// 1) Tries Auth.fetchSignInMethodsForEmail (via dynamic to support multiple SDK versions)
+  /// 2) Falls back to Firestore query on users.email
+  Future<bool> _accountExists(String email) async {
+    // Try FirebaseAuth.fetchSignInMethodsForEmail if available in your SDK
+    try {
+      final dynamic auth = FirebaseAuth.instance; // dynamic avoids compile-time errors
+      final methods = await auth.fetchSignInMethodsForEmail(email);
+      if (methods is List && methods.isNotEmpty) {
+        // If you want to restrict to password accounts only, use:
+        // return methods.contains('password');
+        return true;
+      }
+      return false;
+    } catch (_) {
+      // Fallback to Firestore (requires you store "email" in users docs)
+      try {
+        final qs = await FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+        return qs.docs.isNotEmpty;
+      } catch (_) {
+        // If we can’t confirm either way (e.g., offline), allow flow to continue
+        // to avoid user enumeration leaks—treat as exists.
+        return true;
+      }
+    }
+  }
+
+  // === Forgot Password: mirror your web logic ===
+  Future<void> _handleForgotPassword() async {
+    final target = _emailController.text.trim();
+
+    if (target.isEmpty) {
+      await AppMsg.incompleteForm(
+        context,
+        custom: 'Enter your email first.',
+      );
+      return;
+    }
+    if (_loading) return;
+
+    setState(() => _loading = true);
+    try {
+      // 1) Match your web behavior: check if the account exists
+      final exists = await _accountExists(target);
+      if (!exists) {
+        await AppMsg.error(
+          context,
+          'No account found',
+          m: 'We couldn’t find an account for $target.',
+        );
+        return;
+      }
+
+      // 2) Send the reset email (no custom ActionCodeSettings here → avoids unauthorized domain errors)
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: target);
+
+      await AppMsg.success(
+        context,
+        'Password reset sent',
+        m: 'If an account exists for $target, check your inbox (and spam).',
+      );
+    } on FirebaseAuthException catch (e) {
+      await AppMsg.error(
+        context,
+        'Reset failed',
+        m: e.message ?? e.code,
+      );
+    } catch (e) {
+      await AppMsg.error(context, 'Reset failed', m: e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -225,8 +311,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         errorBuilder: (context, error, stack) =>
                             _buildMissingImagePlaceholder(
                               'Logo',
-                              height:
-                              isSmallScreen ? screenHeight * 0.15 : 200,
+                              height: isSmallScreen ? screenHeight * 0.15 : 200,
                             ),
                       ),
                     ),
@@ -244,8 +329,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12.0),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                        contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
                       onSubmitted: (_) => _handleLogin(),
                     ),
@@ -264,16 +349,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12.0),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                        contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         suffixIcon: IconButton(
-                          onPressed: () =>
-                              setState(() => _obscure = !_obscure),
-                          icon: Icon(
-                            _obscure
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                          icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
                         ),
                       ),
                       onSubmitted: (_) => _handleLogin(),
@@ -312,6 +392,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.white,
                           ),
                         ),
+                      ),
+                    ),
+
+                    // Forgot password (same behavior as web)
+                    const SizedBox(height: 10),
+                    Center(
+                      child: TextButton(
+                        onPressed: _loading ? null : _handleForgotPassword,
+                        child: const Text('Forgot password?'),
                       ),
                     ),
                   ],
